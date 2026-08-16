@@ -15,6 +15,10 @@ export const routes: Routes = [
         component: DirectoryCreateComponent,
       },
       {
+        path: 'directories/:id/edit',
+        component: DirectoryCreateComponent,
+      },
+      {
         path: 'directories/:id',
         component: DirectoryViewComponent,
       },

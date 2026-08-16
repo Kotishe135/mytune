@@ -36,10 +36,32 @@
                 <a
                   iconStart="@tui.database"
                   tuiAsideItem
+                  tuiDropdownContext
                   [routerLink]="['/directories', dir.id]"
+                  [tuiDropdown]="dirMenu"
                 >
                   {{ dir.name }}
                 </a>
+                <ng-template #dirMenu>
+                  <tui-data-list size="s">
+                    <button
+                      iconStart="@tui.pencil"
+                      tuiOption
+                      type="button"
+                      (click)="editDirectory(dir.id)"
+                    >
+                      Редактировать
+                    </button>
+                    <button
+                      iconStart="@tui.trash"
+                      tuiOption
+                      type="button"
+                      (click)="deleteDirectory(dir)"
+                    >
+                      Удалить
+                    </button>
+                  </tui-data-list>
+                </ng-template>
               }
               <button
                 iconStart="@tui.plus"
@@ -90,7 +112,7 @@
         >
           Отмена
         </button>
-        <button tuiButton type="submit">Создать</button>
+        <button appearance="primary" tuiButton type="submit">Создать</button>
       </footer>
     </form>
   </ng-template>

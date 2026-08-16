@@ -82,6 +82,29 @@ export class DirectoryStoreService {
     return directory;
   }
 
+  updateDirectory(
+    id: string,
+    input: {
+      name: string;
+      description: string;
+      schema: DirectorySchema;
+    },
+  ): void {
+    this.patch({
+      directories: this.state().directories.map((d) =>
+        d.id === id
+          ? {
+              ...d,
+              name: input.name.trim(),
+              description: input.description.trim(),
+              schema: input.schema,
+              updatedAt: new Date().toISOString(),
+            }
+          : d,
+      ),
+    });
+  }
+
   updateDirectorySchema(id: string, schema: DirectorySchema): void {
     this.patch({
       directories: this.state().directories.map((d) =>
@@ -120,6 +143,13 @@ export class DirectoryStoreService {
     itemId: string,
     raw: Record<string, unknown>,
   ): void {
+    const directory = this.requireDirectory(directoryId);
+    const data = this.items.applyGeneratedFields(
+      directory,
+      {...raw, id: itemId},
+      {onlyEmpty: true},
+    );
+
     this.patch({
       directories: this.state().directories.map((d) => {
         if (d.id !== directoryId) {
@@ -132,7 +162,7 @@ export class DirectoryStoreService {
             item.id === itemId
               ? {
                   ...item,
-                  data: {...raw, id: item.id},
+                  data: {...data, id: item.id},
                   updatedAt: new Date().toISOString(),
                 }
               : item,

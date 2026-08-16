@@ -36,6 +36,7 @@ import {DirectoryStoreService} from '../../core/services/directory-store.service
         </button>
         @if (store.groups()[0]; as firstGroup) {
           <a
+            appearance="primary"
             tuiButton
             [routerLink]="['/groups', firstGroup.id, 'directories', 'new']"
           >

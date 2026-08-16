@@ -2,6 +2,10 @@
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
+  min-block-size: calc(100vh - 6.5rem);
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  overflow: hidden;
 }
 
 header[tuiHeader] {
@@ -11,50 +15,97 @@ header[tuiHeader] {
   align-items: flex-start;
 }
 
-.actions-aside {
+.header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
   flex-shrink: 0;
 }
 
 .toolbar {
-  display: grid;
-  grid-template-columns: 2fr 1fr 1fr;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: flex-end;
+}
+
+.search {
+  flex: 1 1 16rem;
+  min-inline-size: 12rem;
+}
+
+.dropdown-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  min-inline-size: 18rem;
+}
+
+.table-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-block-size: 12rem;
+  min-inline-size: 0;
+  max-inline-size: 100%;
   gap: 0.75rem;
 }
 
-.columns {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.columns-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem 1rem;
-}
-
-.col {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-
 .table-wrap {
+  flex: 1;
+  min-block-size: 0;
+  min-inline-size: 0;
   overflow: auto;
 }
 
-.sort {
-  all: unset;
-  cursor: pointer;
+.table-wrap table {
+  table-layout: fixed;
+  min-inline-size: 100%;
+}
+
+th[tuiTh],
+td[tuiTd] {
+  overflow: hidden;
+}
+
+.sort-btn {
   display: inline-flex;
-  gap: 0.35rem;
+  max-inline-size: 100%;
   align-items: center;
+  gap: 0.25rem;
+  min-inline-size: 0;
 }
 
-.preview pre {
-  overflow: auto;
-  max-height: 16rem;
-  font-size: 0.75rem;
+.th-label {
+  display: block;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cell-text {
+  display: inline-block;
+  max-inline-size: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+tbody tr {
+  cursor: pointer;
+}
+
+.muted {
+  color: var(--tui-text-tertiary);
+}
+
+.empty {
+  padding: 1.5rem 0;
+  text-align: center;
+  color: var(--tui-text-secondary);
 }
 
 .item-form {
@@ -63,29 +114,37 @@ header[tuiHeader] {
   gap: 0.85rem;
 }
 
-.item-field__title {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
+.item-field__hint {
   margin-bottom: 0.35rem;
   font: var(--tui-font-text-s);
   color: var(--tui-text-secondary);
 }
 
+.auto-field {
+  cursor: help;
+}
+
 .item-form footer {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
   gap: 0.75rem;
 }
 
-.switch {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
+.footer-spacer {
+  flex: 1;
+}
+
+pre {
+  margin: 0;
+  overflow: auto;
+  max-height: 16rem;
+  font-size: 0.75rem;
 }
 
 @media (max-width: 900px) {
-  .toolbar {
-    grid-template-columns: 1fr;
+  .toolbar,
+  .header-actions {
+    flex-direction: column;
+    align-items: stretch;
   }
 }
