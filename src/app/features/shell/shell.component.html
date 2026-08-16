@@ -1,0 +1,97 @@
+<tui-root>
+  <header tuiNavigationHeader>
+    <span tuiNavigationLogo>
+      <tui-icon icon="@tui.book-marked" />
+      <span>Справочники</span>
+    </span>
+    <hr />
+    <button
+      appearance="secondary"
+      iconStart="@tui.folder-plus"
+      tuiButton
+      type="button"
+      (click)="openCreateGroup()"
+    >
+      Группа
+    </button>
+  </header>
+
+  <div class="layout">
+    <aside [tuiNavigationAside]="expanded()">
+      <header>
+        <a iconStart="@tui.home" routerLink="/" tuiAsideItem>Главная</a>
+      </header>
+
+      @for (node of navTree(); track node.group.id) {
+        <tui-aside-group>
+          <button
+            iconStart="@tui.folder"
+            tuiAsideItem
+            tuiChevron
+            type="button"
+          >
+            {{ node.group.name }}
+            <ng-template>
+              @for (dir of node.directories; track dir.id) {
+                <a
+                  iconStart="@tui.database"
+                  tuiAsideItem
+                  [routerLink]="['/directories', dir.id]"
+                >
+                  {{ dir.name }}
+                </a>
+              }
+              <button
+                iconStart="@tui.plus"
+                tuiAsideItem
+                type="button"
+                (click)="createDirectory(node.group.id)"
+              >
+                Новый справочник
+              </button>
+            </ng-template>
+          </button>
+        </tui-aside-group>
+      }
+
+      <footer>
+        <button
+          tuiAsideItem
+          type="button"
+          [iconStart]="expanded() ? '@tui.chevron-left' : '@tui.chevron-right'"
+          (click)="toggleAside()"
+        >
+          {{ expanded() ? 'Свернуть' : 'Развернуть' }}
+        </button>
+      </footer>
+    </aside>
+
+    <main tuiNavigationMain>
+      <router-outlet />
+    </main>
+  </div>
+
+  <ng-template
+    let-observer
+    [tuiDialogOptions]="{label: 'Новая группа', size: 's'}"
+    [(tuiDialog)]="groupDialogOpen"
+  >
+    <form class="dialog-form" (submit)="$event.preventDefault(); createGroup()">
+      <tui-textfield>
+        <label tuiLabel>Название группы</label>
+        <input tuiInput name="groupName" [(ngModel)]="newGroupName" />
+      </tui-textfield>
+      <footer>
+        <button
+          appearance="secondary"
+          tuiButton
+          type="button"
+          (click)="observer.complete()"
+        >
+          Отмена
+        </button>
+        <button tuiButton type="submit">Создать</button>
+      </footer>
+    </form>
+  </ng-template>
+</tui-root>

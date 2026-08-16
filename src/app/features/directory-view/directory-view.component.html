@@ -1,0 +1,191 @@
+@if (directory(); as dir) {
+  <section tuiCardLarge class="page">
+    <header tuiHeader>
+      <hgroup tuiTitle>
+        <h2>{{ dir.name }}</h2>
+        <p tuiSubtitle>
+          {{ groupName() }} · объектов: {{ dir.items.length }}
+          @if (dir.description) {
+            · {{ dir.description }}
+          }
+        </p>
+      </hgroup>
+      <aside class="actions-aside">
+        <button iconStart="@tui.plus" tuiButton type="button" (click)="openCreate()">
+          Объект
+        </button>
+      </aside>
+    </header>
+
+    <div class="toolbar">
+      <tui-textfield>
+        <label tuiLabel>Поиск по любому полю</label>
+        <input tuiInput [ngModel]="search()" (ngModelChange)="search.set($event)" />
+      </tui-textfield>
+
+      <tui-textfield tuiChevron>
+        <label tuiLabel>Фильтр: поле</label>
+        <input
+          tuiSelect
+          [ngModel]="filterField()"
+          (ngModelChange)="filterField.set($event)"
+        />
+        <tui-data-list-wrapper *tuiDropdown [items]="fieldNames()" />
+      </tui-textfield>
+
+      <tui-textfield>
+        <label tuiLabel>Фильтр: значение</label>
+        <input
+          tuiInput
+          [ngModel]="filterValue()"
+          (ngModelChange)="filterValue.set($event)"
+        />
+      </tui-textfield>
+    </div>
+
+    <div class="columns">
+      <strong>Отображаемые поля</strong>
+      <div class="columns-list">
+        @for (field of dir.schema.fields; track field.name) {
+          <label class="col">
+            <input
+              tuiCheckbox
+              type="checkbox"
+              [ngModel]="isColumnVisible(field.name)"
+              (ngModelChange)="toggleColumn(field.name, $event)"
+            />
+            {{ field.name }}
+          </label>
+        }
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table tuiTable [columns]="columnNames()">
+        <thead>
+          <tr>
+            @for (field of columns(); track field.name) {
+              <th tuiTh [sorter]="null">
+                <button class="sort" type="button" (click)="toggleSort(field.name)">
+                  {{ field.name }}
+                  @if (sortField() === field.name) {
+                    <span>{{ sortDir() === 'asc' ? '↑' : '↓' }}</span>
+                  }
+                </button>
+              </th>
+            }
+            <th tuiTh [sorter]="null">Действия</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (item of displayedItems(); track item.id) {
+            <tr>
+              @for (field of columns(); track field.name) {
+                <td tuiTd>
+                  <code>{{ cellValue(item, field) }}</code>
+                </td>
+              }
+              <td tuiTd>
+                <button
+                  appearance="flat-destructive"
+                  iconStart="@tui.trash"
+                  size="s"
+                  tuiIconButton
+                  type="button"
+                  (click)="deleteItem(item.id)"
+                >
+                  Удалить
+                </button>
+              </td>
+            </tr>
+          } @empty {
+            <tr>
+              <td [attr.colspan]="columns().length + 1">Нет объектов</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <details class="preview">
+      <summary>JSON Schema справочника</summary>
+      <pre>{{ dir.schema.jsonSchema | json }}</pre>
+    </details>
+  </section>
+
+  <ng-template
+    let-observer
+    [tuiDialogOptions]="{label: 'Новый объект', size: 'm'}"
+    [(tuiDialog)]="createOpen"
+  >
+    <div class="item-form">
+      @if (formError()) {
+        <div appearance="error" tuiNotification>{{ formError() }}</div>
+      }
+
+      @for (field of editableFields(); track field.id) {
+        <div class="item-field">
+          <div class="item-field__title">
+            <strong>{{ field.name }}</strong>
+            <span>{{ field.description }}</span>
+          </div>
+
+          @if (field.isList && field.type !== 'bool' && field.type !== 'reference' && field.type !== 'enum') {
+            <tui-textfield multi>
+              <label tuiLabel>{{ field.name }}</label>
+              <input tuiInputChip [(ngModel)]="formModel[field.name]" />
+            </tui-textfield>
+          } @else if (field.type === 'bool' && !field.isList) {
+            <label class="switch">
+              <input tuiSwitch type="checkbox" [(ngModel)]="formModel[field.name]" />
+              {{ field.name }}
+            </label>
+          } @else if (field.type === 'enum') {
+            <tui-textfield tuiChevron>
+              <label tuiLabel>{{ field.name }}</label>
+              <input tuiSelect [(ngModel)]="formModel[field.name]" />
+              <tui-data-list-wrapper *tuiDropdown [items]="field.enumValues || []" />
+            </tui-textfield>
+          } @else if (field.type === 'reference') {
+            <tui-textfield tuiChevron [stringify]="stringifyRef">
+              <label tuiLabel>{{ field.name }}</label>
+              <input tuiSelect [(ngModel)]="formModel[field.name]" />
+              <tui-data-list-wrapper *tuiDropdown [items]="referenceOptions(field)" />
+            </tui-textfield>
+          } @else if (field.type === 'json' && !field.isList) {
+            <tui-textfield>
+              <label tuiLabel>{{ field.name }}</label>
+              <textarea tuiTextarea [(ngModel)]="formModel[field.name]"></textarea>
+            </tui-textfield>
+          } @else if (field.type === 'int' && !field.isList) {
+            <tui-textfield>
+              <label tuiLabel>{{ field.name }}</label>
+              <input tuiInput type="number" [(ngModel)]="formModel[field.name]" />
+            </tui-textfield>
+          } @else {
+            <tui-textfield>
+              <label tuiLabel>{{ field.name }}</label>
+              <input tuiInput [(ngModel)]="formModel[field.name]" />
+            </tui-textfield>
+          }
+        </div>
+      }
+
+      <footer>
+        <button appearance="secondary" tuiButton type="button" (click)="observer.complete()">
+          Отмена
+        </button>
+        <button tuiButton type="button" (click)="saveItem(observer)">Сохранить</button>
+      </footer>
+    </div>
+  </ng-template>
+} @else {
+  <section tuiCardLarge>
+    <header tuiHeader>
+      <hgroup tuiTitle>
+        <h2>Справочник не найден</h2>
+      </hgroup>
+    </header>
+    <a routerLink="/" tuiButton>На главную</a>
+  </section>
+}

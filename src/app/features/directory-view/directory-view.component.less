@@ -1,0 +1,91 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+header[tuiHeader] {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.actions-aside {
+  flex-shrink: 0;
+}
+
+.toolbar {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.columns {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.columns-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+}
+
+.col {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.table-wrap {
+  overflow: auto;
+}
+
+.sort {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.preview pre {
+  overflow: auto;
+  max-height: 16rem;
+  font-size: 0.75rem;
+}
+
+.item-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.item-field__title {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin-bottom: 0.35rem;
+  font: var(--tui-font-text-s);
+  color: var(--tui-text-secondary);
+}
+
+.item-form footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+@media (max-width: 900px) {
+  .toolbar {
+    grid-template-columns: 1fr;
+  }
+}

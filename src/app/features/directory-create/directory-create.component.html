@@ -1,0 +1,215 @@
+<section tuiCardLarge class="page">
+  <header tuiHeader>
+    <hgroup tuiTitle>
+      <h2>Новый справочник</h2>
+      <p tuiSubtitle>Группа: {{ groupName() }}</p>
+    </hgroup>
+  </header>
+
+  @if (error()) {
+    <div appearance="error" tuiNotification>{{ error() }}</div>
+  }
+
+  <div tuiForm class="meta">
+    <tui-textfield>
+      <label tuiLabel>Название</label>
+      <input name="name" tuiInput [(ngModel)]="name" />
+    </tui-textfield>
+
+    <tui-textfield>
+      <label tuiLabel>Описание</label>
+      <textarea name="description" tuiTextarea [(ngModel)]="description"></textarea>
+    </tui-textfield>
+  </div>
+
+  <div class="fields-head">
+    <h3 tuiTitle>Поля схемы</h3>
+    <button appearance="secondary" iconStart="@tui.plus" tuiButton type="button" (click)="addField()">
+      Поле
+    </button>
+  </div>
+
+  <div class="fields">
+    @for (field of fields(); track field.id) {
+      <article class="field-card" [class.field-card_locked]="field.name === 'id'">
+        <div class="field-grid">
+          <tui-textfield>
+            <label tuiLabel>Имя поля</label>
+            <input
+              tuiInput
+              [disabled]="field.name === 'id'"
+              [ngModel]="field.name"
+              (ngModelChange)="updateField(field.id, {name: $event})"
+            />
+          </tui-textfield>
+
+          <tui-textfield tuiChevron [stringify]="stringifyType">
+            <label tuiLabel>Тип</label>
+            <input
+              tuiSelect
+              [disabled]="field.name === 'id'"
+              [ngModel]="field.type"
+              (ngModelChange)="updateField(field.id, {type: $event})"
+            />
+            <tui-data-list-wrapper *tuiDropdown [items]="fieldTypeValues" />
+          </tui-textfield>
+
+          <label class="checkbox">
+            <input
+              tuiCheckbox
+              type="checkbox"
+              [disabled]="field.name === 'id' || !schemaBuilder.typeSupportsList(field.type)"
+              [ngModel]="field.isList"
+              (ngModelChange)="updateField(field.id, {isList: $event})"
+            />
+            Список значений
+          </label>
+        </div>
+
+        <tui-textfield>
+          <label tuiLabel>Описание</label>
+          <input
+            tuiInput
+            [ngModel]="field.description"
+            (ngModelChange)="updateField(field.id, {description: $event})"
+          />
+        </tui-textfield>
+
+        @if (field.type === 'enum') {
+          <tui-textfield multi>
+            <label tuiLabel>Значения enum</label>
+            <input
+              tuiInputChip
+              [ngModel]="field.enumValues || []"
+              (ngModelChange)="setEnumValues(field.id, $event)"
+            />
+          </tui-textfield>
+        }
+
+        @if (field.type === 'reference') {
+          <tui-textfield tuiChevron [stringify]="stringifyDirectory">
+            <label tuiLabel>Справочник</label>
+            <input
+              tuiSelect
+              [ngModel]="field.referenceDirectoryId || null"
+              (ngModelChange)="updateField(field.id, {referenceDirectoryId: $event})"
+            />
+            <tui-data-list-wrapper *tuiDropdown [items]="directoryIds()" />
+          </tui-textfield>
+        }
+
+        <div class="validations">
+          <div class="fields-head">
+            <strong>Валидации</strong>
+            <button
+              appearance="flat"
+              iconStart="@tui.plus"
+              size="s"
+              tuiButton
+              type="button"
+              [disabled]="field.name === 'id'"
+              (click)="addValidation(field.id)"
+            >
+              Добавить
+            </button>
+          </div>
+
+          @for (validation of field.validations; track validation.id) {
+            <div class="validation-row">
+              <tui-textfield tuiChevron [stringify]="stringifyValidation">
+                <label tuiLabel>Вид</label>
+                <input
+                  tuiSelect
+                  [disabled]="field.name === 'id'"
+                  [ngModel]="validation.kind"
+                  (ngModelChange)="updateValidation(field.id, validation.id, {kind: $event, value: undefined, serverValidatorId: undefined, customRule: undefined})"
+                />
+                <tui-data-list-wrapper *tuiDropdown [items]="validationKindValues" />
+              </tui-textfield>
+
+              @if (validation.kind === 'min' || validation.kind === 'max' || validation.kind === 'minLength' || validation.kind === 'maxLength') {
+                <tui-textfield>
+                  <label tuiLabel>Значение</label>
+                  <input
+                    tuiInput
+                    type="number"
+                    [ngModel]="validation.value"
+                    (ngModelChange)="onValidationNumber(field.id, validation.id, $event)"
+                  />
+                </tui-textfield>
+              }
+
+              @if (validation.kind === 'regex') {
+                <tui-textfield>
+                  <label tuiLabel>Regex</label>
+                  <input
+                    tuiInput
+                    [ngModel]="validation.value"
+                    (ngModelChange)="updateValidation(field.id, validation.id, {value: $event})"
+                  />
+                </tui-textfield>
+              }
+
+              @if (validation.kind === 'custom') {
+                <tui-textfield>
+                  <label tuiLabel>Кастомное правило</label>
+                  <input
+                    tuiInput
+                    [ngModel]="validation.customRule"
+                    (ngModelChange)="updateValidation(field.id, validation.id, {customRule: $event})"
+                  />
+                </tui-textfield>
+              }
+
+              @if (validation.kind === 'server') {
+                <tui-textfield tuiChevron [stringify]="stringifyServerValidator">
+                  <label tuiLabel>Серверный валидатор</label>
+                  <input
+                    tuiSelect
+                    [ngModel]="validation.serverValidatorId || null"
+                    (ngModelChange)="updateValidation(field.id, validation.id, {serverValidatorId: $event})"
+                  />
+                  <tui-data-list-wrapper *tuiDropdown [items]="serverValidatorIds(field.type)" />
+                </tui-textfield>
+              }
+
+              <button
+                appearance="flat-destructive"
+                iconStart="@tui.trash"
+                size="s"
+                tuiIconButton
+                type="button"
+                [disabled]="field.name === 'id'"
+                (click)="removeValidation(field.id, validation.id)"
+              >
+                Удалить
+              </button>
+            </div>
+          }
+        </div>
+
+        @if (field.name !== 'id') {
+          <button
+            appearance="flat-destructive"
+            iconStart="@tui.trash"
+            tuiButton
+            type="button"
+            (click)="removeField(field.id)"
+          >
+            Удалить поле
+          </button>
+        }
+      </article>
+    }
+  </div>
+
+  <details class="preview">
+    <summary>JSON Schema preview</summary>
+    <pre>{{ previewSchema() | json }}</pre>
+  </details>
+
+  <footer class="actions">
+    <a appearance="secondary" routerLink="/" tuiButton>Отмена</a>
+    <button tuiButton type="button" (click)="save()">Создать справочник</button>
+  </footer>
+</section>
