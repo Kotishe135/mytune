@@ -28,10 +28,14 @@ import {
 } from '@taiga-ui/kit';
 import {TuiCardLarge, TuiForm, TuiHeader} from '@taiga-ui/layout';
 import {
+  DIRECTORY_TYPE_OPTIONS,
   FIELD_TYPE_OPTIONS,
+  FILE_DIRECTORY_FORMAT_OPTIONS,
+  DirectoryType,
   FieldDefinition,
   FieldType,
   FieldValidation,
+  FileDirectoryFormat,
   VALIDATION_KIND_OPTIONS,
   ValidationKind,
 } from '../../core/models/directory.models';
@@ -84,11 +88,17 @@ export class DirectoryCreateComponent implements OnInit {
 
   readonly fieldTypeValues = FIELD_TYPE_OPTIONS.map((o) => o.value);
   readonly validationKindValues = VALIDATION_KIND_OPTIONS.map((o) => o.value);
+  readonly directoryTypeValues = DIRECTORY_TYPE_OPTIONS.map((o) => o.value);
+  readonly fileFormatValues = FILE_DIRECTORY_FORMAT_OPTIONS.map((o) => o.value);
 
   groupId = '';
   directoryId = '';
   name = '';
   description = '';
+  directoryType: DirectoryType = 'list';
+  fileFormat: FileDirectoryFormat = 'json';
+  fileSchemaEnabled = false;
+  fileSchemaText = '';
   fieldOrder = new Map<number, number>();
 
   readonly isEdit = signal(false);
@@ -98,12 +108,14 @@ export class DirectoryCreateComponent implements OnInit {
   readonly draft = signal<FieldDefinition | null>(null);
   readonly draftMode = signal<'add' | 'edit'>('add');
   readonly draftError = signal('');
+  readonly nestedFieldDrawerOpen = signal(false);
+  readonly nestedDraft = signal<FieldDefinition | null>(null);
+  readonly nestedDraftMode = signal<'add' | 'edit'>('add');
+  readonly nestedDraftError = signal('');
+  readonly nestedEditPath = signal<number[]>([]);
 
   readonly previewSchema = computed(() =>
-    this.schemaBuilder.buildJsonSchema(
-      this.schemaBuilder.ensureIdField(this.orderedFields()),
-      this.name.trim() || 'directory',
-    ),
+    this.schemaBuilder.buildJsonSchema(this.schemaFieldsForType(), this.name.trim() || 'directory'),
   );
 
   readonly groupName = computed(
@@ -147,6 +159,11 @@ export class DirectoryCreateComponent implements OnInit {
   readonly drawerTitle = computed(() =>
     this.draftMode() === 'add' ? 'Новое поле' : 'Редактирование поля',
   );
+  readonly nestedDrawerTitle = computed(() =>
+    this.nestedDraftMode() === 'add'
+      ? 'Новое вложенное поле'
+      : 'Редактирование вложенного поля',
+  );
 
   ngOnInit(): void {
     const directoryId = this.route.snapshot.paramMap.get('id') || '';
@@ -161,14 +178,18 @@ export class DirectoryCreateComponent implements OnInit {
       this.groupId = directory.groupId;
       this.name = directory.name;
       this.description = directory.description;
+      this.directoryType = directory.type ?? 'list';
+      this.fileFormat = directory.fileFormat ?? 'json';
+      this.fileSchemaEnabled = directory.fileSchemaEnabled ?? false;
+      this.fileSchemaText = directory.fileSchemaText ?? '';
       this.fields.set(
-        this.schemaBuilder.ensureIdField(
-          directory.schema.fields.map((field) => ({
-            ...field,
-            enumValues: [...(field.enumValues || [])],
-            validations: field.validations.map((v) => ({...v})),
-          })),
-        ),
+        this.directoryType === 'file'
+          ? []
+          : directory.schema.fields
+              .map((field) => this.cloneField(field))
+              .filter((field) =>
+                this.directoryType === 'single' ? !this.isSystemField(field) : true,
+              ),
       );
       return;
     }
@@ -178,7 +199,26 @@ export class DirectoryCreateComponent implements OnInit {
       void this.router.navigate(['/']);
       return;
     }
+    this.directoryType = 'list';
+    this.fileFormat = 'json';
+    this.fileSchemaEnabled = false;
+    this.fileSchemaText = '';
     this.fields.set(this.schemaBuilder.ensureIdField([]));
+  }
+
+  onDirectoryTypeChange(type: DirectoryType): void {
+    this.directoryType = type;
+    if (type === 'file') {
+      this.fields.set([]);
+      this.fieldOrder = new Map();
+      return;
+    }
+
+    if (type === 'list') {
+      this.fields.set(this.schemaBuilder.ensureIdField(this.fields()));
+      return;
+    }
+    this.fields.set(this.fields().filter((f) => !this.isSystemField(f)));
   }
 
   openAddField(): void {
@@ -191,6 +231,7 @@ export class DirectoryCreateComponent implements OnInit {
       description: '',
       type: 'string',
       isList: false,
+      fields: [],
       enumValues: [],
       validations: [],
     });
@@ -201,11 +242,8 @@ export class DirectoryCreateComponent implements OnInit {
     this.applyOrder();
     this.draftMode.set('edit');
     this.draftError.set('');
-    this.draft.set({
-      ...field,
-      enumValues: [...(field.enumValues || [])],
-      validations: field.validations.map((v) => ({...v})),
-    });
+    const cloned = this.cloneField(field);
+    this.draft.set(cloned);
     this.fieldDrawerOpen.set(true);
   }
 
@@ -213,6 +251,7 @@ export class DirectoryCreateComponent implements OnInit {
     this.fieldDrawerOpen.set(false);
     this.draft.set(null);
     this.draftError.set('');
+    this.closeNestedFieldDrawer();
   }
 
   patchDraft(patch: Partial<FieldDefinition>): void {
@@ -232,6 +271,9 @@ export class DirectoryCreateComponent implements OnInit {
       }
       if (patch.type && patch.type !== 'reference') {
         next.referenceDirectoryId = undefined;
+      }
+      if (patch.type && patch.type !== 'object') {
+        next.fields = [];
       }
       return next;
     });
@@ -297,6 +339,205 @@ export class DirectoryCreateComponent implements OnInit {
     });
   }
 
+  nestedFields(path: number[]): FieldDefinition[] {
+    const objectField = this.objectFieldByPath(path);
+    return objectField?.fields ?? [];
+  }
+
+  nestedPath(path: number[], index: number): number[] {
+    return [...path, index];
+  }
+
+  openAddNestedField(path: number[]): void {
+    const parent = this.objectFieldByPath(path);
+    if (!parent || parent.type !== 'object') {
+      return;
+    }
+    this.nestedDraftMode.set('add');
+    this.nestedDraftError.set('');
+    this.nestedEditPath.set(path);
+    this.nestedDraft.set({
+      id: this.ids.uuid(),
+      name: '',
+      description: '',
+      type: 'string',
+      isList: false,
+      fields: [],
+      enumValues: [],
+      validations: [],
+    });
+    this.nestedFieldDrawerOpen.set(true);
+  }
+
+  openEditNestedField(path: number[]): void {
+    const field = this.fieldByPath(path);
+    if (!field || this.isSystemField(field)) {
+      return;
+    }
+    this.nestedDraftMode.set('edit');
+    this.nestedDraftError.set('');
+    this.nestedEditPath.set(path);
+    this.nestedDraft.set(this.cloneField(field));
+    this.nestedFieldDrawerOpen.set(true);
+  }
+
+  closeNestedFieldDrawer(): void {
+    this.nestedFieldDrawerOpen.set(false);
+    this.nestedDraft.set(null);
+    this.nestedDraftError.set('');
+    this.nestedEditPath.set([]);
+  }
+
+  patchNestedDraft(patch: Partial<FieldDefinition>): void {
+    this.nestedDraft.update((current) => {
+      if (!current) {
+        return current;
+      }
+      const next = {...current, ...patch};
+      if (patch.type && !this.schemaBuilder.typeSupportsList(patch.type)) {
+        next.isList = false;
+      }
+      if (patch.type && patch.type !== 'enum') {
+        next.enumValues = [];
+      }
+      if (patch.type && patch.type !== 'reference') {
+        next.referenceDirectoryId = undefined;
+      }
+      if (patch.type && patch.type !== 'object') {
+        next.fields = [];
+      }
+      return next;
+    });
+  }
+
+  setNestedDraftEnumValues(values: string[]): void {
+    this.patchNestedDraft({enumValues: values});
+  }
+
+  addNestedDraftValidation(): void {
+    this.nestedDraft.update((current) =>
+      current
+        ? {
+            ...current,
+            validations: [
+              ...current.validations,
+              {id: this.ids.uuid(), kind: 'required'},
+            ],
+          }
+        : current,
+    );
+  }
+
+  updateNestedDraftValidation(
+    validationId: string,
+    patch: Partial<FieldValidation>,
+  ): void {
+    this.nestedDraft.update((current) => {
+      if (!current) {
+        return current;
+      }
+      return {
+        ...current,
+        validations: current.validations.map((v) =>
+          v.id === validationId ? {...v, ...patch} : v,
+        ),
+      };
+    });
+  }
+
+  onNestedDraftValidationNumber(
+    validationId: string,
+    value: string | number | null,
+  ): void {
+    this.updateNestedDraftValidation(validationId, {
+      value: value === '' || value === null ? undefined : Number(value),
+    });
+  }
+
+  removeNestedDraftValidation(validationId: string): void {
+    this.nestedDraft.update((current) =>
+      current
+        ? {
+            ...current,
+            validations: current.validations.filter((v) => v.id !== validationId),
+          }
+        : current,
+    );
+  }
+
+  saveNestedDraft(): void {
+    const draft = this.nestedDraft();
+    if (!draft) {
+      return;
+    }
+    this.nestedDraftError.set('');
+    const path = this.nestedEditPath();
+    const siblingNames =
+      this.nestedDraftMode() === 'add'
+        ? this.nestedFields(path).map((f) => f.name.trim())
+        : this.siblingNestedNames(path, draft.id);
+    const message = this.validateField(draft, siblingNames);
+    if (message) {
+      this.nestedDraftError.set(message);
+      return;
+    }
+
+    const normalized: FieldDefinition = {
+      ...draft,
+      name: draft.name.trim(),
+      description: draft.description.trim(),
+      fields: draft.type === 'object' ? draft.fields ?? [] : [],
+      enumValues: draft.enumValues ?? [],
+    };
+    const nestedError = this.validateNestedFields(normalized);
+    if (nestedError) {
+      this.nestedDraftError.set(nestedError);
+      return;
+    }
+
+    this.draft.update((root) => {
+      if (!root) {
+        return root;
+      }
+      const editable = this.cloneField(root);
+      if (this.nestedDraftMode() === 'add') {
+        const target = this.objectFieldByPath(path, editable);
+        if (!target) {
+          return root;
+        }
+        target.fields = [...(target.fields ?? []), normalized];
+      } else {
+        const replaced = this.replaceFieldAtPath(path, normalized, editable);
+        if (!replaced) {
+          return root;
+        }
+      }
+      return editable;
+    });
+
+    this.closeNestedFieldDrawer();
+  }
+
+  removeNestedField(path: number[]): void {
+    if (!path.length) {
+      return;
+    }
+    this.draft.update((root) => {
+      if (!root) {
+        return root;
+      }
+      const editable = this.cloneField(root);
+      const parentPath = path.slice(0, -1);
+      const index = path[path.length - 1];
+      const parent = this.objectFieldByPath(parentPath, editable);
+      if (!parent || !parent.fields) {
+        return root;
+      }
+      parent.fields = parent.fields.filter((_, i) => i !== index);
+      return editable;
+    });
+  }
+
   saveDraft(): void {
     const draft = this.draft();
     if (!draft) {
@@ -314,8 +555,15 @@ export class DirectoryCreateComponent implements OnInit {
       ...draft,
       name: draft.name.trim(),
       description: draft.description.trim(),
+      fields: draft.type === 'object' ? draft.fields ?? [] : [],
       enumValues: draft.enumValues ?? [],
     };
+
+    const nestedError = this.validateNestedFields(normalized);
+    if (nestedError) {
+      this.draftError.set(nestedError);
+      return;
+    }
 
     if (this.draftMode() === 'add') {
       this.fields.update((list) => [...list, normalized]);
@@ -348,6 +596,12 @@ export class DirectoryCreateComponent implements OnInit {
     return type;
   }
 
+  stringifyDirectoryType = (value: DirectoryType): string =>
+    DIRECTORY_TYPE_OPTIONS.find((o) => o.value === value)?.label || value;
+
+  stringifyFileFormat = (value: FileDirectoryFormat): string =>
+    FILE_DIRECTORY_FORMAT_OPTIONS.find((o) => o.value === value)?.label || value;
+
   stringifyValidation = (value: ValidationKind): string =>
     VALIDATION_KIND_OPTIONS.find((o) => o.value === value)?.label || value;
 
@@ -361,9 +615,15 @@ export class DirectoryCreateComponent implements OnInit {
     return this.schemaBuilder.isSystemIdField(field);
   }
 
+  isSchemaType(): boolean {
+    return this.directoryType === 'list' || this.directoryType === 'single';
+  }
+
   save(): void {
     this.error.set('');
-    this.applyOrder();
+    if (this.isSchemaType()) {
+      this.applyOrder();
+    }
 
     const name = this.name.trim();
     if (!name) {
@@ -371,33 +631,45 @@ export class DirectoryCreateComponent implements OnInit {
       return;
     }
 
-    const fields = this.schemaBuilder.ensureIdField(this.fields());
-    for (const field of fields) {
-      const message = this.validateField(
-        field,
-        fields.filter((f) => f.id !== field.id).map((f) => f.name.trim()),
-      );
-      if (message) {
-        this.error.set(message);
-        return;
+    let schema;
+    if (this.isSchemaType()) {
+      const fields = this.schemaFieldsForType();
+      for (const field of fields) {
+        const message = this.validateField(
+          field,
+          fields.filter((f) => f.id !== field.id).map((f) => f.name.trim()),
+        );
+        if (message) {
+          this.error.set(message);
+          return;
+        }
       }
+
+      const normalized = fields.map((f) => ({
+        ...f,
+        name: f.name.trim(),
+        description: f.description.trim(),
+      }));
+
+      schema = {
+        fields: normalized,
+        jsonSchema: this.schemaBuilder.buildJsonSchema(normalized, name),
+      };
+    } else {
+      schema = {
+        fields: [],
+        jsonSchema: this.fileSchemaEnabled ? this.fileSchemaText : {},
+      };
     }
-
-    const normalized = fields.map((f) => ({
-      ...f,
-      name: f.name.trim(),
-      description: f.description.trim(),
-    }));
-
-    const schema = {
-      fields: normalized,
-      jsonSchema: this.schemaBuilder.buildJsonSchema(normalized, name),
-    };
 
     if (this.isEdit()) {
       this.store.updateDirectory(this.directoryId, {
         name,
         description: this.description.trim(),
+        type: this.directoryType,
+        fileFormat: this.directoryType === 'file' ? this.fileFormat : undefined,
+        fileSchemaEnabled: this.directoryType === 'file' ? this.fileSchemaEnabled : undefined,
+        fileSchemaText: this.directoryType === 'file' ? this.fileSchemaText : undefined,
         schema,
       });
       void this.router.navigate(['/directories', this.directoryId]);
@@ -408,6 +680,10 @@ export class DirectoryCreateComponent implements OnInit {
       groupId: this.groupId,
       name,
       description: this.description.trim(),
+      type: this.directoryType,
+      fileFormat: this.directoryType === 'file' ? this.fileFormat : undefined,
+      fileSchemaEnabled: this.directoryType === 'file' ? this.fileSchemaEnabled : undefined,
+      fileSchemaText: this.directoryType === 'file' ? this.fileSchemaText : undefined,
       schema,
     });
 
@@ -418,6 +694,13 @@ export class DirectoryCreateComponent implements OnInit {
     const idField = this.idField();
     const ordered = this.orderedUserFields();
     return idField ? [idField, ...ordered] : ordered;
+  }
+
+  private schemaFieldsForType(): FieldDefinition[] {
+    if (this.directoryType === 'list') {
+      return this.schemaBuilder.ensureIdField(this.fields());
+    }
+    return this.fields().filter((f) => !this.isSystemField(f));
   }
 
   private orderedUserFields(): FieldDefinition[] {
@@ -480,5 +763,102 @@ export class DirectoryCreateComponent implements OnInit {
       }
     }
     return null;
+  }
+
+  private validateNestedFields(
+    parent: FieldDefinition,
+    path = parent.name.trim(),
+  ): string | null {
+    if (parent.type !== 'object') {
+      return null;
+    }
+    const nested = parent.fields ?? [];
+    const names = new Set<string>();
+    for (const field of nested) {
+      const fieldName = field.name.trim();
+      if (!fieldName) {
+        return `Объект «${path}»: укажите имя каждого вложенного поля`;
+      }
+      if (fieldName === 'id') {
+        return `Объект «${path}»: имя «id» зарезервировано`;
+      }
+      if (names.has(fieldName)) {
+        return `Объект «${path}»: имена вложенных полей должны быть уникальны`;
+      }
+      names.add(fieldName);
+      const message = this.validateField(
+        field,
+        nested
+          .filter((f) => f !== field)
+          .map((f) => f.name.trim()),
+      );
+      if (message) {
+        return `Объект «${path}»: ${message}`;
+      }
+      const childError = this.validateNestedFields(field, `${path}.${fieldName}`);
+      if (childError) {
+        return childError;
+      }
+    }
+    return null;
+  }
+
+  private cloneField(field: FieldDefinition): FieldDefinition {
+    return {
+      ...field,
+      fields: (field.fields ?? []).map((nested) => this.cloneField(nested)),
+      enumValues: [...(field.enumValues || [])],
+      validations: field.validations.map((v) => ({...v})),
+    };
+  }
+
+  private siblingNestedNames(path: number[], fieldId: string): string[] {
+    if (!path.length) {
+      return [];
+    }
+    const parent = this.objectFieldByPath(path.slice(0, -1));
+    return (parent?.fields ?? [])
+      .filter((f) => f.id !== fieldId)
+      .map((f) => f.name.trim());
+  }
+
+  private fieldByPath(path: number[], root = this.draft()): FieldDefinition | null {
+    if (!root) {
+      return null;
+    }
+    if (!path.length) {
+      return root;
+    }
+    let current: FieldDefinition | undefined = root;
+    for (const index of path) {
+      if (!current || current.type !== 'object') {
+        return null;
+      }
+      current = (current.fields ?? [])[index];
+    }
+    return current ?? null;
+  }
+
+  private objectFieldByPath(path: number[], root = this.draft()): FieldDefinition | null {
+    const field = this.fieldByPath(path, root);
+    return field && field.type === 'object' ? field : null;
+  }
+
+  private replaceFieldAtPath(
+    path: number[],
+    field: FieldDefinition,
+    root: FieldDefinition,
+  ): boolean {
+    if (!path.length) {
+      return false;
+    }
+    const parentPath = path.slice(0, -1);
+    const index = path[path.length - 1];
+    const parent = this.objectFieldByPath(parentPath, root);
+    if (!parent || !parent.fields || !parent.fields[index]) {
+      return false;
+    }
+    parent.fields = parent.fields.map((item, i) => (i === index ? field : item));
+    return true;
   }
 }

@@ -2,9 +2,11 @@ import {computed, inject, Injectable, signal} from '@angular/core';
 import {
   AppStoreState,
   Directory,
+  DirectoryType,
   DirectoryGroup,
   DirectoryItem,
   DirectorySchema,
+  FileDirectoryFormat,
 } from '../models/directory.models';
 import {ItemFactoryService} from './item-factory.service';
 
@@ -65,6 +67,10 @@ export class DirectoryStoreService {
     groupId: string;
     name: string;
     description: string;
+    type: DirectoryType;
+    fileFormat?: FileDirectoryFormat;
+    fileSchemaEnabled?: boolean;
+    fileSchemaText?: string;
     schema: DirectorySchema;
   }): Directory {
     const now = new Date().toISOString();
@@ -73,6 +79,10 @@ export class DirectoryStoreService {
       groupId: input.groupId,
       name: input.name.trim(),
       description: input.description.trim(),
+      type: input.type,
+      fileFormat: input.fileFormat,
+      fileSchemaEnabled: input.fileSchemaEnabled,
+      fileSchemaText: input.fileSchemaText,
       schema: input.schema,
       items: [],
       createdAt: now,
@@ -87,19 +97,36 @@ export class DirectoryStoreService {
     input: {
       name: string;
       description: string;
+      type: DirectoryType;
+      fileFormat?: FileDirectoryFormat;
+      fileSchemaEnabled?: boolean;
+      fileSchemaText?: string;
       schema: DirectorySchema;
     },
   ): void {
     this.patch({
       directories: this.state().directories.map((d) =>
         d.id === id
-          ? {
-              ...d,
-              name: input.name.trim(),
-              description: input.description.trim(),
-              schema: input.schema,
-              updatedAt: new Date().toISOString(),
-            }
+          ? (() => {
+              const nextItems =
+                input.type === 'list'
+                  ? d.items
+                  : d.items.length
+                    ? [d.items[0]]
+                    : d.items;
+              return {
+                ...d,
+                name: input.name.trim(),
+                description: input.description.trim(),
+                type: input.type,
+                fileFormat: input.fileFormat,
+                fileSchemaEnabled: input.fileSchemaEnabled,
+                fileSchemaText: input.fileSchemaText,
+                schema: input.schema,
+                items: nextItems,
+                updatedAt: new Date().toISOString(),
+              };
+            })()
           : d,
       ),
     });
@@ -218,7 +245,13 @@ export class DirectoryStoreService {
       }
       return {
         groups: parsed.groups,
-        directories: parsed.directories ?? [],
+        directories: (parsed.directories ?? []).map((directory) => ({
+          ...directory,
+          type: directory.type ?? 'list',
+          fileFormat: directory.fileFormat ?? 'json',
+          fileSchemaEnabled: directory.fileSchemaEnabled ?? false,
+          fileSchemaText: directory.fileSchemaText ?? '',
+        })),
       };
     } catch {
       return this.seed();

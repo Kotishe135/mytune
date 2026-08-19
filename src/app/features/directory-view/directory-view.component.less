@@ -114,6 +114,44 @@ tbody tr {
   gap: 0.85rem;
 }
 
+.item-field {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.editor-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-block-size: 0;
+  gap: 0.75rem;
+}
+
+.file-content-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-block-size: 0;
+}
+
+.file-editor {
+  flex: 1;
+  min-block-size: 12rem;
+  block-size: 100%;
+}
+
+.editor-actions {
+  margin-top: auto;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.75rem;
+  position: sticky;
+  inset-block-end: 0;
+  padding-block: 0.5rem 0 0.25rem;
+  border-block-start: 1px solid var(--tui-border-normal);
+}
+
 .item-field__hint {
   margin-bottom: 0.35rem;
   font: var(--tui-font-text-s);
@@ -124,14 +162,59 @@ tbody tr {
   cursor: help;
 }
 
-.item-form footer {
+.object-list {
   display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.object-list__head {
+  display: flex;
+  justify-content: space-between;
   align-items: center;
   gap: 0.75rem;
 }
 
-.footer-spacer {
-  flex: 1;
+.object-card {
+  border: 1px solid var(--tui-border-normal);
+  border-radius: var(--tui-radius-l);
+  padding: 0.75rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.object-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.object-card__actions {
+  display: flex;
+  align-items: center;
+}
+
+.object-toggle {
+  justify-content: flex-start;
+  gap: 0.35rem;
+}
+
+.meta-switch {
+  min-block-size: auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border: 1px solid var(--tui-border-normal);
+  border-radius: var(--tui-radius-l);
+  padding: 0.75rem 1rem;
+}
+
+.item-form footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.75rem;
 }
 
 pre {

@@ -7,6 +7,17 @@ export class SchemaBuilderService {
     fields: FieldDefinition[],
     directoryName: string,
   ): Record<string, unknown> {
+    const objectSchema = this.buildObjectShape(fields);
+
+    return {
+      $schema: 'https://json-schema.org/draft/2020-12/schema',
+      $id: `directory://${directoryName}`,
+      title: directoryName,
+      ...objectSchema,
+    };
+  }
+
+  private buildObjectShape(fields: FieldDefinition[]): Record<string, unknown> {
     const properties: Record<string, unknown> = {};
     const required: string[] = [];
 
@@ -35,9 +46,6 @@ export class SchemaBuilderService {
     }
 
     return {
-      $schema: 'https://json-schema.org/draft/2020-12/schema',
-      $id: `directory://${directoryName}`,
-      title: directoryName,
       type: 'object',
       additionalProperties: false,
       required,
@@ -54,6 +62,8 @@ export class SchemaBuilderService {
       case 'int':
       case 'autoincrement':
         return {type: 'integer'};
+      case 'object':
+        return this.buildObjectShape(field.fields ?? []);
       case 'json':
         return {};
       case 'enum':

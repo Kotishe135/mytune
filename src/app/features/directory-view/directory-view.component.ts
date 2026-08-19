@@ -1,4 +1,4 @@
-import {JsonPipe} from '@angular/common';
+import {JsonPipe, NgTemplateOutlet} from '@angular/common';
 import {Component, computed, effect, inject, signal, untracked} from '@angular/core';
 import {toSignal} from '@angular/core/rxjs-interop';
 import {FormsModule} from '@angular/forms';
@@ -40,8 +40,11 @@ import {PolymorpheusTemplate} from '@taiga-ui/polymorpheus';
 import {map} from 'rxjs';
 import {
   DirectoryItem,
+  DirectoryType,
+  FILE_DIRECTORY_FORMAT_OPTIONS,
   FieldDefinition,
   FieldType,
+  FileDirectoryFormat,
 } from '../../core/models/directory.models';
 import {DirectoryStoreService} from '../../core/services/directory-store.service';
 
@@ -57,6 +60,7 @@ const AUTO_GENERATED_HINT =
   imports: [
     FormsModule,
     JsonPipe,
+    NgTemplateOutlet,
     PolymorpheusTemplate,
     RouterLink,
     TuiAccordion,
@@ -116,6 +120,28 @@ export class DirectoryViewComponent {
     return dir ? this.store.getGroup(dir.groupId)?.name || '—' : '—';
   });
 
+  readonly directoryType = computed<DirectoryType>(
+    () => this.directory()?.type ?? 'list',
+  );
+
+  readonly isListDirectory = computed(() => this.directoryType() === 'list');
+  readonly isSingleDirectory = computed(() => this.directoryType() === 'single');
+  readonly isFileDirectory = computed(() => this.directoryType() === 'file');
+  readonly isSchemaType = computed(
+    () => this.isListDirectory() || this.isSingleDirectory(),
+  );
+
+  readonly singleItem = computed(() => this.directory()?.items[0]);
+
+  readonly fileFormatValues = FILE_DIRECTORY_FORMAT_OPTIONS.map((o) => o.value);
+  readonly fileFormat = signal<FileDirectoryFormat>('json');
+  readonly fileContent = signal('');
+  readonly fileError = signal('');
+  readonly singleFormError = signal('');
+  private initialSingleSnapshot = '';
+  private initialFileFormat: FileDirectoryFormat = 'json';
+  private initialFileContent = '';
+
   readonly fieldNames = computed(
     () => this.directory()?.schema.fields.map((f) => f.name) ?? [],
   );
@@ -133,6 +159,7 @@ export class DirectoryViewComponent {
   readonly columnsOpen = signal(false);
   readonly dirMenuOpen = signal(false);
   readonly contextItemId = signal<string | null>(null);
+  readonly expandedObjectKeys = signal<Record<string, boolean>>({});
   readonly pageSizes = PAGE_SIZES;
   readonly page = signal(0);
   readonly pageSize = signal(10);
@@ -224,6 +251,51 @@ export class DirectoryViewComponent {
 
   constructor() {
     effect(() => {
+      const dir = this.directory();
+      const type = this.directoryType();
+      untracked(() => {
+        if (!dir || (type !== 'single' && type !== 'file') || dir.items.length) {
+          return;
+        }
+        this.store.addItem(
+          dir.id,
+          type === 'file' ? {format: dir.fileFormat ?? 'json', content: ''} : {},
+        );
+      });
+    });
+
+    effect(() => {
+      const dir = this.directory();
+      const type = this.directoryType();
+      const item = this.singleItem();
+      untracked(() => {
+        if (!dir || type !== 'file') {
+          return;
+        }
+        this.fileFormat.set(
+          (item?.data['format'] as FileDirectoryFormat) ?? dir.fileFormat ?? 'json',
+        );
+        this.fileContent.set(String(item?.data['content'] ?? ''));
+        this.initialFileFormat = this.fileFormat();
+        this.initialFileContent = this.fileContent();
+        this.fileError.set('');
+      });
+    });
+
+    effect(() => {
+      const type = this.directoryType();
+      const item = this.singleItem();
+      untracked(() => {
+        if (type !== 'single') {
+          return;
+        }
+        this.populateFormModel(item);
+        this.initialSingleSnapshot = this.formSnapshot();
+        this.singleFormError.set('');
+      });
+    });
+
+    effect(() => {
       const id = this.directoryId();
       untracked(() => {
         const dir = id ? this.store.getDirectory(id) : undefined;
@@ -261,19 +333,7 @@ export class DirectoryViewComponent {
 
     this.editingItemId.set(null);
     this.formError.set('');
-    this.formModel = {};
-    for (const field of this.formFields()) {
-      if (this.isAutoField(field.type)) {
-        continue;
-      }
-      this.formModel[field.name] = field.isList
-        ? []
-        : field.type === 'bool'
-          ? false
-          : field.type === 'json'
-            ? '{}'
-            : '';
-    }
+    this.populateFormModel();
     this.createOpen.set(true);
   }
 
@@ -284,24 +344,7 @@ export class DirectoryViewComponent {
 
     this.editingItemId.set(item.id);
     this.formError.set('');
-    this.formModel = {};
-    for (const field of this.formFields()) {
-      const value = item.data[field.name];
-      if (this.isAutoField(field.type)) {
-        this.formModel[field.name] = value ?? '';
-        continue;
-      }
-      if (field.isList) {
-        this.formModel[field.name] = Array.isArray(value) ? [...value] : [];
-      } else if (field.type === 'json') {
-        this.formModel[field.name] =
-          typeof value === 'string' ? value : JSON.stringify(value ?? {}, null, 2);
-      } else if (field.type === 'bool') {
-        this.formModel[field.name] = Boolean(value);
-      } else {
-        this.formModel[field.name] = value ?? '';
-      }
-    }
+    this.populateFormModel(item);
     this.createOpen.set(true);
   }
 
@@ -395,6 +438,11 @@ export class DirectoryViewComponent {
     return this.stringifyValue(item.data[field.name]);
   }
 
+  singleCellValue(field: FieldDefinition): string {
+    const item = this.singleItem();
+    return item ? this.cellValue(item, field) : '';
+  }
+
   cellList(item: DirectoryItem, field: FieldDefinition): string[] {
     const value = item.data[field.name];
     if (Array.isArray(value)) {
@@ -457,74 +505,86 @@ export class DirectoryViewComponent {
 
   stringifyIdentity = (value: string): string => value;
 
-  saveItem(observer: {complete: () => void}): void {
+  stringifyFileFormat = (value: FileDirectoryFormat): string =>
+    FILE_DIRECTORY_FORMAT_OPTIONS.find((o) => o.value === value)?.label || value;
+
+  saveSingleItem(): void {
+    this.singleFormError.set('');
+    const error = this.persistFormModel(this.singleItem()?.id ?? null);
+    if (error) {
+      this.singleFormError.set(error);
+    }
+  }
+
+  cancelSingleItemChanges(): void {
+    this.populateFormModel(this.singleItem());
+    this.singleFormError.set('');
+  }
+
+  hasSingleChanges(): boolean {
+    return this.formSnapshot() !== this.initialSingleSnapshot;
+  }
+
+  saveFile(): void {
     const dir = this.directory();
-    if (!dir) {
+    if (!dir || this.directoryType() !== 'file') {
       return;
     }
 
-    this.formError.set('');
-    const payload: Record<string, unknown> = {};
+    this.fileError.set('');
+    const format = this.fileFormat();
+    const content = this.fileContent();
 
-    for (const field of dir.schema.fields) {
-      if (this.isAutoField(field.type) && field.type !== 'uuid') {
-        if (this.editingItemId()) {
-          payload[field.name] = this.formModel[field.name];
-        }
-        continue;
+    if (format === 'json' && content.trim()) {
+      try {
+        JSON.parse(content);
+      } catch {
+        this.fileError.set('Невалидный JSON');
+        return;
       }
-
-      let value = this.formModel[field.name];
-
-      if (field.isList) {
-        value = Array.isArray(value) ? value : [];
-      }
-
-      if (field.type === 'int' && !field.isList) {
-        value =
-          value === '' || value === null || value === undefined
-            ? undefined
-            : Number(value);
-      }
-
-      if (field.type === 'int' && field.isList) {
-        value = (value as unknown[]).map((v) => Number(v));
-        if ((value as number[]).some((n) => Number.isNaN(n))) {
-          this.formError.set(`Поле «${field.name}»: список должен содержать числа`);
-          return;
-        }
-      }
-
-      if (field.type === 'json') {
-        try {
-          value = field.isList
-            ? (value as string[]).map((v) => JSON.parse(String(v)))
-            : JSON.parse(String(value || '{}'));
-        } catch {
-          this.formError.set(`Поле «${field.name}»: невалидный JSON`);
-          return;
-        }
-      }
-
-      if (field.validations.some((v) => v.kind === 'required')) {
-        const emptyList = field.isList && Array.isArray(value) && !value.length;
-        const emptyScalar =
-          !field.isList &&
-          (value === undefined || value === null || value === '');
-        if (emptyList || emptyScalar) {
-          this.formError.set(`Поле «${field.name}» обязательно`);
-          return;
-        }
-      }
-
-      payload[field.name] = value;
     }
 
-    const editingId = this.editingItemId();
-    if (editingId) {
-      this.store.updateItem(dir.id, editingId, payload);
+    const item = this.singleItem();
+    const payload = {format, content};
+    if (item) {
+      this.store.updateItem(dir.id, item.id, payload);
     } else {
       this.store.addItem(dir.id, payload);
+    }
+
+    this.store.updateDirectory(dir.id, {
+      name: dir.name,
+      description: dir.description,
+      type: dir.type,
+      fileFormat: format,
+      fileSchemaEnabled: dir.fileSchemaEnabled,
+      fileSchemaText: dir.fileSchemaText,
+      schema: dir.schema,
+    });
+
+    this.initialFileFormat = format;
+    this.initialFileContent = content;
+  }
+
+  cancelFileChanges(): void {
+    this.fileFormat.set(this.initialFileFormat);
+    this.fileContent.set(this.initialFileContent);
+    this.fileError.set('');
+  }
+
+  hasFileChanges(): boolean {
+    return (
+      this.fileFormat() !== this.initialFileFormat ||
+      this.fileContent() !== this.initialFileContent
+    );
+  }
+
+  saveItem(observer: {complete: () => void}): void {
+    this.formError.set('');
+    const error = this.persistFormModel(this.editingItemId());
+    if (error) {
+      this.formError.set(error);
+      return;
     }
     this.editingItemId.set(null);
     this.createOpen.set(false);
@@ -532,6 +592,10 @@ export class DirectoryViewComponent {
   }
 
   deleteCurrentItem(observer: {complete: () => void}): void {
+    if (this.directoryType() !== 'list') {
+      observer.complete();
+      return;
+    }
     const itemId = this.editingItemId();
     if (!itemId) {
       return;
@@ -543,6 +607,9 @@ export class DirectoryViewComponent {
   }
 
   deleteItem(itemId: string): void {
+    if (this.directoryType() !== 'list') {
+      return;
+    }
     const dir = this.directory();
     if (!dir) {
       return;
@@ -562,5 +629,314 @@ export class DirectoryViewComponent {
       return JSON.stringify(value);
     }
     return String(value);
+  }
+
+  fieldValue(container: Record<string, unknown>, field: FieldDefinition): unknown {
+    return container[field.name];
+  }
+
+  setFieldValue(
+    container: Record<string, unknown>,
+    field: FieldDefinition,
+    value: unknown,
+  ): void {
+    container[field.name] = value;
+  }
+
+  objectPath(basePath: string, segment: string): string {
+    return basePath ? `${basePath}.${segment}` : segment;
+  }
+
+  listObjectPath(basePath: string, index: number): string {
+    return `${basePath}[${index}]`;
+  }
+
+  isObjectExpanded(path: string): boolean {
+    const state = this.expandedObjectKeys();
+    return state[path] ?? true;
+  }
+
+  toggleObjectExpanded(path: string): void {
+    this.expandedObjectKeys.update((state) => ({
+      ...state,
+      [path]: !(state[path] ?? true),
+    }));
+  }
+
+  objectValue(
+    container: Record<string, unknown>,
+    field: FieldDefinition,
+  ): Record<string, unknown> {
+    const current = container[field.name];
+    if (current && typeof current === 'object' && !Array.isArray(current)) {
+      return current as Record<string, unknown>;
+    }
+    const next = this.defaultObjectValue(field);
+    container[field.name] = next;
+    return next;
+  }
+
+  objectListValue(
+    container: Record<string, unknown>,
+    field: FieldDefinition,
+  ): Record<string, unknown>[] {
+    const current = container[field.name];
+    if (Array.isArray(current)) {
+      return current.filter(
+        (item) => item && typeof item === 'object' && !Array.isArray(item),
+      ) as Record<string, unknown>[];
+    }
+    const next: Record<string, unknown>[] = [];
+    container[field.name] = next;
+    return next;
+  }
+
+  addObjectListItem(container: Record<string, unknown>, field: FieldDefinition): void {
+    const list = this.objectListValue(container, field);
+    list.push(this.defaultObjectValue(field));
+    container[field.name] = [...list];
+  }
+
+  removeObjectListItem(
+    container: Record<string, unknown>,
+    field: FieldDefinition,
+    index: number,
+  ): void {
+    const list = this.objectListValue(container, field).filter((_, i) => i !== index);
+    container[field.name] = list;
+  }
+
+  private populateFormModel(item?: DirectoryItem): void {
+    this.formModel = {};
+    for (const field of this.formFields()) {
+      const value = item?.data[field.name];
+      if (this.isAutoField(field.type)) {
+        this.formModel[field.name] = value ?? '';
+        continue;
+      }
+      if (field.isList) {
+        this.formModel[field.name] =
+          field.type === 'object'
+            ? this.prepareObjectListValue(field, value)
+            : Array.isArray(value)
+              ? [...value]
+              : [];
+      } else if (field.type === 'json') {
+        this.formModel[field.name] =
+          typeof value === 'string' ? value : JSON.stringify(value ?? {}, null, 2);
+      } else if (field.type === 'object') {
+        this.formModel[field.name] = this.prepareObjectValue(field, value);
+      } else if (field.type === 'bool') {
+        this.formModel[field.name] = Boolean(value);
+      } else {
+        this.formModel[field.name] = value ?? '';
+      }
+    }
+  }
+
+  private persistFormModel(editingId: string | null): string | null {
+    const dir = this.directory();
+    if (!dir) {
+      return 'Справочник не найден';
+    }
+
+    const payload: Record<string, unknown> = {};
+    for (const field of dir.schema.fields) {
+      if (this.isAutoField(field.type) && field.type !== 'uuid') {
+        if (editingId) {
+          payload[field.name] = this.formModel[field.name];
+        }
+        continue;
+      }
+
+      const normalized = this.normalizeFieldValue(
+        field,
+        this.formModel[field.name],
+        field.name,
+      );
+      if (normalized.error) {
+        return normalized.error;
+      }
+      const value = normalized.value;
+      if (field.validations.some((v) => v.kind === 'required')) {
+        const emptyList = field.isList && Array.isArray(value) && !value.length;
+        const emptyScalar =
+          !field.isList &&
+          (value === undefined || value === null || value === '');
+        if (emptyList || emptyScalar) {
+          return `Поле «${field.name}» обязательно`;
+        }
+      }
+      payload[field.name] = value;
+    }
+
+    if (editingId) {
+      this.store.updateItem(dir.id, editingId, payload);
+    } else {
+      this.store.addItem(dir.id, payload);
+    }
+    this.initialSingleSnapshot = this.formSnapshot();
+    return null;
+  }
+
+  private formSnapshot(): string {
+    const normalized = this.formFields().map((field) => ({
+      name: field.name,
+      value: this.formModel[field.name] ?? null,
+    }));
+    return JSON.stringify(normalized);
+  }
+
+  private prepareObjectValue(
+    field: FieldDefinition,
+    value: unknown,
+  ): Record<string, unknown> {
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      return this.hydrateObjectBySchema(field, value as Record<string, unknown>);
+    }
+    return this.defaultObjectValue(field);
+  }
+
+  private prepareObjectListValue(
+    field: FieldDefinition,
+    value: unknown,
+  ): Record<string, unknown>[] {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    return value
+      .filter((item) => item && typeof item === 'object' && !Array.isArray(item))
+      .map((item) => this.hydrateObjectBySchema(field, item as Record<string, unknown>));
+  }
+
+  private defaultObjectValue(field: FieldDefinition): Record<string, unknown> {
+    const result: Record<string, unknown> = {};
+    for (const child of field.fields ?? []) {
+      result[child.name] = this.defaultValueForField(child);
+    }
+    return result;
+  }
+
+  private hydrateObjectBySchema(
+    field: FieldDefinition,
+    source: Record<string, unknown>,
+  ): Record<string, unknown> {
+    const result: Record<string, unknown> = {};
+    for (const child of field.fields ?? []) {
+      const value = source[child.name];
+      if (child.type === 'object' && child.isList) {
+        result[child.name] = this.prepareObjectListValue(child, value);
+      } else if (child.type === 'object') {
+        result[child.name] = this.prepareObjectValue(child, value);
+      } else if (child.isList) {
+        result[child.name] = Array.isArray(value) ? [...value] : [];
+      } else if (child.type === 'bool') {
+        result[child.name] = Boolean(value);
+      } else {
+        result[child.name] = value ?? this.defaultValueForField(child);
+      }
+    }
+    return result;
+  }
+
+  private defaultValueForField(field: FieldDefinition): unknown {
+    if (field.type === 'object') {
+      return field.isList ? [] : this.defaultObjectValue(field);
+    }
+    if (field.isList) {
+      return [];
+    }
+    if (field.type === 'bool') {
+      return false;
+    }
+    if (field.type === 'json') {
+      return '{}';
+    }
+    return '';
+  }
+
+  private normalizeFieldValue(
+    field: FieldDefinition,
+    rawValue: unknown,
+    path: string,
+  ): {value: unknown; error?: string} {
+    if (field.isList) {
+      const list = Array.isArray(rawValue) ? rawValue : [];
+      const values: unknown[] = [];
+      for (let i = 0; i < list.length; i++) {
+        const itemResult = this.normalizeSingleFieldValue(
+          {...field, isList: false},
+          list[i],
+          `${path}[${i}]`,
+        );
+        if (itemResult.error) {
+          return itemResult;
+        }
+        values.push(itemResult.value);
+      }
+      return {value: values};
+    }
+    return this.normalizeSingleFieldValue(field, rawValue, path);
+  }
+
+  private normalizeSingleFieldValue(
+    field: FieldDefinition,
+    rawValue: unknown,
+    path: string,
+  ): {value: unknown; error?: string} {
+    if (field.type === 'int') {
+      if (rawValue === '' || rawValue === null || rawValue === undefined) {
+        return {value: undefined};
+      }
+      const numberValue = Number(rawValue);
+      if (Number.isNaN(numberValue)) {
+        return {value: undefined, error: `Поле «${path}»: ожидается число`};
+      }
+      return {value: numberValue};
+    }
+
+    if (field.type === 'json') {
+      try {
+        return {value: JSON.parse(String(rawValue || '{}'))};
+      } catch {
+        return {value: undefined, error: `Поле «${path}»: невалидный JSON`};
+      }
+    }
+
+    if (field.type === 'object') {
+      if (!rawValue || typeof rawValue !== 'object' || Array.isArray(rawValue)) {
+        return {value: this.defaultObjectValue(field)};
+      }
+      const source = rawValue as Record<string, unknown>;
+      const result: Record<string, unknown> = {};
+      for (const child of field.fields ?? []) {
+        const childResult = this.normalizeFieldValue(
+          child,
+          source[child.name],
+          `${path}.${child.name}`,
+        );
+        if (childResult.error) {
+          return childResult;
+        }
+        const childValue = childResult.value;
+        if (child.validations.some((v) => v.kind === 'required')) {
+          const emptyList = child.isList && Array.isArray(childValue) && !childValue.length;
+          const emptyScalar =
+            !child.isList &&
+            (childValue === undefined || childValue === null || childValue === '');
+          if (emptyList || emptyScalar) {
+            return {value: undefined, error: `Поле «${path}.${child.name}» обязательно`};
+          }
+        }
+        result[child.name] = childValue;
+      }
+      return {value: result};
+    }
+
+    if (field.type === 'bool') {
+      return {value: Boolean(rawValue)};
+    }
+
+    return {value: rawValue};
   }
 }

@@ -2,6 +2,7 @@ export type FieldType =
   | 'string'
   | 'bool'
   | 'int'
+  | 'object'
   | 'json'
   | 'enum'
   | 'autoincrement'
@@ -37,6 +38,7 @@ export interface FieldDefinition {
   description: string;
   type: FieldType;
   isList: boolean;
+  fields?: FieldDefinition[];
   enumValues?: string[];
   referenceDirectoryId?: string;
   validations: FieldValidation[];
@@ -44,8 +46,11 @@ export interface FieldDefinition {
 
 export interface DirectorySchema {
   fields: FieldDefinition[];
-  jsonSchema: Record<string, unknown>;
+  jsonSchema: unknown;
 }
+
+export type DirectoryType = 'list' | 'single' | 'file';
+export type FileDirectoryFormat = 'json' | 'yaml';
 
 export interface DirectoryItem {
   id: string;
@@ -59,6 +64,10 @@ export interface Directory {
   groupId: string;
   name: string;
   description: string;
+  type: DirectoryType;
+  fileFormat?: FileDirectoryFormat;
+  fileSchemaEnabled?: boolean;
+  fileSchemaText?: string;
   schema: DirectorySchema;
   items: DirectoryItem[];
   createdAt: string;
@@ -87,6 +96,7 @@ export const FIELD_TYPE_OPTIONS: ReadonlyArray<{ value: FieldType; label: string
   {value: 'string', label: 'Строка (string)'},
   {value: 'bool', label: 'Булево (bool)'},
   {value: 'int', label: 'Число (int)'},
+  {value: 'object', label: 'Объект (object)'},
   {value: 'json', label: 'JSON'},
   {value: 'enum', label: 'Перечисление (enum)'},
   {value: 'autoincrement', label: 'Автоинкремент'},
@@ -108,4 +118,21 @@ export const VALIDATION_KIND_OPTIONS: ReadonlyArray<{
   {value: 'unique', label: 'Уникальность'},
   {value: 'custom', label: 'Кастомная'},
   {value: 'server', label: 'Серверная валидация'},
+];
+
+export const DIRECTORY_TYPE_OPTIONS: ReadonlyArray<{
+  value: DirectoryType;
+  label: string;
+}> = [
+  {value: 'list', label: 'Список объектов'},
+  {value: 'single', label: 'Один объект'},
+  {value: 'file', label: 'Файл (JSON/YAML)'},
+];
+
+export const FILE_DIRECTORY_FORMAT_OPTIONS: ReadonlyArray<{
+  value: FileDirectoryFormat;
+  label: string;
+}> = [
+  {value: 'json', label: 'JSON'},
+  {value: 'yaml', label: 'YAML'},
 ];

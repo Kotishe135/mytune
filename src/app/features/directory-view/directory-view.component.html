@@ -1,402 +1,617 @@
 @if (directory(); as dir) {
-  <section tuiCardLarge class="page">
-    <header tuiHeader>
-      <hgroup tuiTitle>
-        <h2>{{ dir.name }}</h2>
-        <p tuiSubtitle>
-          {{ groupName() }} · объектов: {{ dir.items.length }}
-          @if (dir.description) {
-            · {{ dir.description }}
-          }
-        </p>
-      </hgroup>
-      <div class="header-actions">
-        <button
-          appearance="primary"
-          iconStart="@tui.plus"
-          size="l"
-          tuiButton
-          type="button"
-          (click)="openCreate()"
-        >
-          Добавить объект
-        </button>
-        <button
-          appearance="secondary"
-          iconStart="@tui.ellipsis-vertical"
-          size="l"
-          tuiIconButton
-          type="button"
-          [tuiDropdown]="dirMenu"
-          [tuiDropdownOpen]="dirMenuOpen()"
-          (tuiDropdownOpenChange)="dirMenuOpen.set($event)"
-        >
-          Действия справочника
-        </button>
-      </div>
-    </header>
-
-    <div class="toolbar">
-      <tui-textfield class="search">
-        <label tuiLabel>Поиск</label>
-        <input
-          placeholder="По любому полю"
-          tuiInput
-          [ngModel]="search()"
-          (ngModelChange)="search.set($event)"
-        />
-      </tui-textfield>
-
-      <button
-        appearance="secondary"
-        iconStart="@tui.filter"
-        tuiButton
-        tuiChevron
-        type="button"
-        [tuiDropdown]="filters"
-        [tuiDropdownOpen]="filtersOpen()"
-        (tuiDropdownOpenChange)="filtersOpen.set($event)"
-      >
-        Фильтры
-        @if (hasFieldFilter()) {
-          <div appearance="primary" size="s" tuiBadge>1</div>
-        }
-      </button>
-
-      <button
-        appearance="secondary"
-        iconStart="@tui.eye"
-        tuiButton
-        tuiChevron
-        type="button"
-        [tuiDropdown]="columnsMenu"
-        [tuiDropdownOpen]="columnsOpen()"
-        (tuiDropdownOpenChange)="columnsOpen.set($event)"
-      >
-        Колонки
-      </button>
-    </div>
-
-    <ng-template
-      #filters="polymorpheus"
-      polymorpheus
-    >
-      <div tuiForm class="dropdown-panel">
-        <tui-textfield tuiChevron>
-          <label tuiLabel>Поле</label>
-          <input
-            tuiSelect
-            [ngModel]="filterField()"
-            (ngModelChange)="filterField.set($event)"
-          />
-          <tui-data-list-wrapper *tuiDropdown [items]="fieldNames()" />
-        </tui-textfield>
-
-        <tui-textfield>
-          <label tuiLabel>Значение</label>
-          <input
-            tuiInput
-            [ngModel]="filterValue()"
-            (ngModelChange)="filterValue.set($event)"
-          />
-        </tui-textfield>
-
-        <button
-          appearance="flat"
-          tuiButton
-          type="button"
-          (click)="clearFilter(); filtersOpen.set(false)"
-        >
-          Сбросить
-        </button>
-      </div>
-    </ng-template>
-
-    <ng-template #dirMenu>
-      <tui-data-list size="s">
-        <button
-          iconStart="@tui.pencil"
-          tuiOption
-          type="button"
-          (click)="dirMenuOpen.set(false); editDirectory()"
-        >
-          Редактировать
-        </button>
-        <button
-          iconStart="@tui.trash"
-          tuiOption
-          type="button"
-          (click)="dirMenuOpen.set(false); deleteDirectory()"
-        >
-          Удалить
-        </button>
-      </tui-data-list>
-    </ng-template>
-
-    <ng-template
-      #columnsMenu="polymorpheus"
-      polymorpheus
-    >
-      <div class="dropdown-panel">
-        <tui-filter
-          size="s"
-          [items]="fieldNames()"
-          [ngModel]="visibleColumns()"
-          (ngModelChange)="onColumnsChange($event)"
-        />
-      </div>
-    </ng-template>
-
-    <div class="table-panel">
-      <div class="table-wrap">
-        <table
-          tuiTable
-          [columns]="columnNames()"
-          [size]="'m'"
-          [style.width]="columnLayout().width"
-        >
-          <thead>
-            <tr>
-              @for (field of columns(); track field.name) {
-                <th
-                  tuiTh
-                  [sorter]="null"
-                  [style.min-width]="columnLayout().widths[$index]"
-                  [style.width]="columnLayout().widths[$index]"
-                >
-                  <button
-                    appearance="flat"
-                    size="xs"
-                    tuiButton
-                    type="button"
-                    class="sort-btn"
-                    (click)="toggleSort(field.name); $event.stopPropagation()"
-                  >
-                    <span class="th-label" [tuiHint]="field.name">{{ field.name }}</span>
-                    @if (sortField() === field.name) {
-                      <tui-icon
-                        [icon]="sortDir() === 'asc' ? '@tui.chevron-up' : '@tui.chevron-down'"
-                      />
+    <section tuiCardLarge class="page">
+        <header tuiHeader>
+            <hgroup tuiTitle>
+                <h2>{{ dir.name }}</h2>
+                <p tuiSubtitle>
+                    {{ groupName() }} · объектов: {{ dir.items.length }}
+                    @if (dir.description) {
+                        · {{ dir.description }}
                     }
-                  </button>
-                </th>
-              }
-            </tr>
-          </thead>
-          <tbody>
-            @for (item of pagedItems(); track item.id) {
-              <tr
-                tuiDropdownContext
-                [tuiDropdown]="rowMenu"
-                (click)="openEdit(item)"
-                (contextmenu)="contextItemId.set(item.id)"
-              >
-                @for (field of columns(); track field.name) {
-                  <td tuiTd [style.min-width]="columnLayout().widths[$index]">
-                    @if (isEmptyCell(item, field)) {
-                      <span class="muted">—</span>
-                    } @else if (isListCell(item, field)) {
-                      <tui-items-with-more>
-                        @for (chip of cellList(item, field); track $index) {
-                          <div *tuiItem size="xs" tuiChip>{{ chip }}</div>
-                        }
-                        <ng-template let-number tuiMore>
-                          <div size="xs" tuiChip>+{{ number }}</div>
-                        </ng-template>
-                      </tui-items-with-more>
-                    } @else if (isBoolCell(field)) {
-                      <span
-                        tuiStatus
-                        [tuiStatus]="
+                </p>
+            </hgroup>
+            <div class="header-actions">
+                @if (isListDirectory()) {
+                    <button
+                            appearance="primary"
+                            iconStart="@tui.plus"
+                            size="l"
+                            tuiButton
+                            type="button"
+                            (click)="openCreate()"
+                    >
+                        Добавить объект
+                    </button>
+                }
+                <button
+                        appearance="secondary"
+                        iconStart="@tui.ellipsis-vertical"
+                        size="l"
+                        tuiIconButton
+                        type="button"
+                        [tuiDropdown]="dirMenu"
+                        [tuiDropdownOpen]="dirMenuOpen()"
+                        (tuiDropdownOpenChange)="dirMenuOpen.set($event)"
+                >
+                    Действия справочника
+                </button>
+            </div>
+        </header>
+
+        @if (isListDirectory()) {
+            <div class="toolbar">
+                <tui-textfield class="search">
+                    <label tuiLabel>Поиск</label>
+                    <input
+                            placeholder="По любому полю"
+                            tuiInput
+                            [ngModel]="search()"
+                            (ngModelChange)="search.set($event)"
+                    />
+                </tui-textfield>
+
+                <button
+                        appearance="secondary"
+                        iconStart="@tui.filter"
+                        tuiButton
+                        tuiChevron
+                        type="button"
+                        [tuiDropdown]="filters"
+                        [tuiDropdownOpen]="filtersOpen()"
+                        (tuiDropdownOpenChange)="filtersOpen.set($event)"
+                >
+                    Фильтры
+                    @if (hasFieldFilter()) {
+                        <div appearance="primary" size="s" tuiBadge>1</div>
+                    }
+                </button>
+
+                <button
+                        appearance="secondary"
+                        iconStart="@tui.eye"
+                        tuiButton
+                        tuiChevron
+                        type="button"
+                        [tuiDropdown]="columnsMenu"
+                        [tuiDropdownOpen]="columnsOpen()"
+                        (tuiDropdownOpenChange)="columnsOpen.set($event)"
+                >
+                    Колонки
+                </button>
+            </div>
+        }
+
+        <ng-template
+            #filters="polymorpheus"
+            polymorpheus
+        >
+            <div tuiForm class="dropdown-panel">
+                <tui-textfield tuiChevron>
+                    <label tuiLabel>Поле</label>
+                    <input
+                            tuiSelect
+                            [ngModel]="filterField()"
+                            (ngModelChange)="filterField.set($event)"
+                    />
+                    <tui-data-list-wrapper *tuiDropdown [items]="fieldNames()"/>
+                </tui-textfield>
+
+                <tui-textfield>
+                    <label tuiLabel>Значение</label>
+                    <input
+                            tuiInput
+                            [ngModel]="filterValue()"
+                            (ngModelChange)="filterValue.set($event)"
+                    />
+                </tui-textfield>
+
+                <button
+                        appearance="flat"
+                        tuiButton
+                        type="button"
+                        (click)="clearFilter(); filtersOpen.set(false)"
+                >
+                    Сбросить
+                </button>
+            </div>
+        </ng-template>
+
+        <ng-template #dirMenu>
+            <tui-data-list size="s">
+                <button
+                        iconStart="@tui.pencil"
+                        tuiOption
+                        type="button"
+                        (click)="dirMenuOpen.set(false); editDirectory()"
+                >
+                    Редактировать
+                </button>
+                <button
+                        iconStart="@tui.trash"
+                        tuiOption
+                        type="button"
+                        (click)="dirMenuOpen.set(false); deleteDirectory()"
+                >
+                    Удалить
+                </button>
+            </tui-data-list>
+        </ng-template>
+
+        <ng-template
+            #columnsMenu="polymorpheus"
+            polymorpheus
+        >
+            <div class="dropdown-panel">
+                <tui-filter
+                        size="s"
+                        [items]="fieldNames()"
+                        [ngModel]="visibleColumns()"
+                        (ngModelChange)="onColumnsChange($event)"
+                />
+            </div>
+        </ng-template>
+
+        @if (isListDirectory()) {
+            <div class="table-panel">
+                <div class="table-wrap">
+                    <table
+                            tuiTable
+                            [columns]="columnNames()"
+                            [size]="'m'"
+                            [style.width]="columnLayout().width"
+                    >
+                        <thead>
+                        <tr>
+                            @for (field of columns(); track field.name) {
+                                <th
+                                        tuiTh
+                                        [sorter]="null"
+                                        [style.min-width]="columnLayout().widths[$index]"
+                                        [style.width]="columnLayout().widths[$index]"
+                                >
+                                    <button
+                                            appearance="flat"
+                                            size="xs"
+                                            tuiButton
+                                            type="button"
+                                            class="sort-btn"
+                                            (click)="toggleSort(field.name); $event.stopPropagation()"
+                                    >
+                                        <span class="th-label" [tuiHint]="field.name">{{ field.name }}</span>
+                                        @if (sortField() === field.name) {
+                                            <tui-icon
+                                                    [icon]="sortDir() === 'asc' ? '@tui.chevron-up' : '@tui.chevron-down'"
+                                            />
+                                        }
+                                    </button>
+                                </th>
+                            }
+                        </tr>
+                        </thead>
+                        <tbody>
+                            @for (item of pagedItems(); track item.id) {
+                                <tr
+                                        tuiDropdownContext
+                                        [tuiDropdown]="rowMenu"
+                                        (click)="openEdit(item)"
+                                        (contextmenu)="contextItemId.set(item.id)"
+                                >
+                                    @for (field of columns(); track field.name) {
+                                        <td tuiTd [style.min-width]="columnLayout().widths[$index]">
+                                            @if (isEmptyCell(item, field)) {
+                                                <span class="muted">—</span>
+                                            } @else if (isListCell(item, field)) {
+                                                <tui-items-with-more>
+                                                    @for (chip of cellList(item, field); track $index) {
+                                                        <div *tuiItem size="xs" tuiChip>{{ chip }}</div>
+                                                    }
+                                                    <ng-template let-number tuiMore>
+                                                        <div size="xs" tuiChip>+{{ number }}</div>
+                                                    </ng-template>
+                                                </tui-items-with-more>
+                                            } @else if (isBoolCell(field)) {
+                                                <span
+                                                        tuiStatus
+                                                        [tuiStatus]="
                           boolValue(item, field)
                             ? 'var(--tui-status-positive)'
                             : 'var(--tui-status-neutral)'
                         "
-                      >
+                                                >
                         {{ boolValue(item, field) ? 'Да' : 'Нет' }}
                       </span>
-                    } @else {
-                      <span class="cell-text" [tuiHint]="cellValue(item, field)">
+                                            } @else {
+                                                <span class="cell-text" [tuiHint]="cellValue(item, field)">
                         {{ cellValue(item, field) }}
                       </span>
-                    }
-                  </td>
-                }
-              </tr>
-            } @empty {
-              <tr>
-                <td tuiTd [attr.colspan]="columns().length || 1">
-                  <div class="empty">Нет объектов</div>
-                </td>
-              </tr>
-            }
-          </tbody>
-        </table>
-      </div>
-      <tui-table-pagination
-        [items]="pageSizes"
-        [total]="filteredItems().length"
-        [(page)]="page"
-        [(size)]="pageSize"
-      />
-    </div>
-
-    <ng-template #rowMenu>
-      <tui-data-list size="s">
-        <button
-          iconStart="@tui.pencil"
-          tuiOption
-          type="button"
-          (click)="editContextItem()"
-        >
-          Редактировать
-        </button>
-        <button
-          iconStart="@tui.trash"
-          tuiOption
-          type="button"
-          (click)="deleteContextItem()"
-        >
-          Удалить
-        </button>
-      </tui-data-list>
-    </ng-template>
-
-    <tui-accordion>
-      <button tuiAccordion>JSON Schema справочника</button>
-      <tui-expand>
-        <pre>{{ dir.schema.jsonSchema | json }}</pre>
-      </tui-expand>
-    </tui-accordion>
-  </section>
-
-  <ng-template
-    let-observer
-    [tuiDialogOptions]="{label: itemDialogTitle(), size: 'm'}"
-    [(tuiDialog)]="createOpen"
-  >
-    <div tuiForm class="item-form">
-      @if (formError()) {
-        <div appearance="negative" tuiNotification>{{ formError() }}</div>
-      }
-
-      @for (field of formFields(); track field.id) {
-        <div class="item-field">
-          @if (isAutoField(field.type)) {
-            <div
-              class="auto-field"
-              [tuiHint]="editingItemId() ? '' : autoGeneratedHint"
-            >
-              @if (field.description) {
-                <div class="item-field__hint">{{ field.description }}</div>
-              }
-              <tui-textfield>
-                <label tuiLabel>{{ field.name }}</label>
-                <input
-                  disabled
-                  tuiInput
-                  [ngModel]="autoFieldValue(field)"
-                  [ngModelOptions]="{standalone: true}"
+                                            }
+                                        </td>
+                                    }
+                                </tr>
+                            } @empty {
+                                <tr>
+                                    <td tuiTd [attr.colspan]="columns().length || 1">
+                                        <div class="empty">Нет объектов</div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                <tui-table-pagination
+                        [items]="pageSizes"
+                        [total]="filteredItems().length"
+                        [(page)]="page"
+                        [(size)]="pageSize"
                 />
-              </tui-textfield>
             </div>
-          } @else {
-            @if (field.description) {
-              <div class="item-field__hint">{{ field.description }}</div>
-            }
-
-            @if (field.isList && (field.type === 'enum' || field.type === 'reference')) {
-              <tui-textfield
-                multi
-                tuiChevron
-                [stringify]="field.type === 'reference' ? stringifyRef : stringifyIdentity"
-              >
-                <label tuiLabel>{{ field.name }}</label>
-                <input tuiInputChip [(ngModel)]="formModel[field.name]" />
-                <tui-input-chip *tuiItem />
-                <tui-data-list-wrapper
-                  *tuiDropdown
-                  tuiMultiSelectGroup
-                  [items]="enumOrRefItems(field)"
-                />
-              </tui-textfield>
-            } @else if (field.isList) {
-              <tui-textfield multi>
-                <label tuiLabel>{{ field.name }}</label>
-                <input tuiInputChip [(ngModel)]="formModel[field.name]" />
-                <tui-input-chip *tuiItem />
-              </tui-textfield>
-            } @else if (field.type === 'bool') {
-              <label tuiCell>
-                <div tuiTitle>{{ field.name }}</div>
-                <input tuiSwitch type="checkbox" [(ngModel)]="formModel[field.name]" />
-              </label>
-            } @else if (field.type === 'enum') {
-              <tui-textfield tuiChevron>
-                <label tuiLabel>{{ field.name }}</label>
-                <input tuiSelect [(ngModel)]="formModel[field.name]" />
-                <tui-data-list-wrapper *tuiDropdown [items]="field.enumValues || []" />
-              </tui-textfield>
-            } @else if (field.type === 'reference') {
-              <tui-textfield tuiChevron [stringify]="stringifyRef">
-                <label tuiLabel>{{ field.name }}</label>
-                <input tuiSelect [(ngModel)]="formModel[field.name]" />
-                <tui-data-list-wrapper *tuiDropdown [items]="referenceOptions(field)" />
-              </tui-textfield>
-            } @else if (field.type === 'json') {
-              <tui-textfield>
-                <label tuiLabel>{{ field.name }}</label>
-                <textarea tuiTextarea [(ngModel)]="formModel[field.name]"></textarea>
-              </tui-textfield>
-            } @else if (field.type === 'int') {
-              <tui-textfield>
-                <label tuiLabel>{{ field.name }}</label>
-                <input tuiInput type="number" [(ngModel)]="formModel[field.name]" />
-              </tui-textfield>
-            } @else {
-              <tui-textfield>
-                <label tuiLabel>{{ field.name }}</label>
-                <input tuiInput [(ngModel)]="formModel[field.name]" />
-              </tui-textfield>
-            }
-          }
-        </div>
-      }
-
-      <footer>
-        @if (editingItemId()) {
-          <button
-            appearance="flat-destructive"
-            iconStart="@tui.trash"
-            tuiButton
-            type="button"
-            (click)="deleteCurrentItem(observer)"
-          >
-            Удалить
-          </button>
+        } @else if (isSingleDirectory()) {
+            <section tuiForm class="editor-panel">
+                @if (singleFormError()) {
+                    <div appearance="negative" tuiNotification>{{ singleFormError() }}</div>
+                }
+                @for (field of formFields(); track field.id) {
+                    <div class="item-field">
+                        <ng-container
+                                [ngTemplateOutlet]="fieldEditor"
+                                [ngTemplateOutletContext]="{field, container: formModel, level: 0, path: field.name}"
+                        />
+                    </div>
+                }
+                @if (hasSingleChanges()) {
+                    <footer class="editor-actions">
+                        <button
+                                appearance="secondary"
+                                tuiButton
+                                type="button"
+                                (click)="cancelSingleItemChanges()"
+                        >
+                            Отменить
+                        </button>
+                        <button appearance="primary" tuiButton type="button" (click)="saveSingleItem()">
+                            Сохранить
+                        </button>
+                    </footer>
+                }
+            </section>
+        } @else if (isFileDirectory()) {
+            <section tuiForm class="editor-panel">
+                @if (fileError()) {
+                    <div appearance="negative" tuiNotification>{{ fileError() }}</div>
+                }
+                <tui-textfield tuiChevron [stringify]="stringifyFileFormat">
+                    <label tuiLabel>Формат файла</label>
+                    <input tuiSelect [ngModel]="fileFormat()" (ngModelChange)="fileFormat.set($event)"/>
+                    <tui-data-list-wrapper *tuiDropdown [items]="fileFormatValues"/>
+                </tui-textfield>
+                <tui-textfield class="file-content-wrap" [tuiTextfieldCleaner]="false">
+                    <label tuiLabel>Содержимое</label>
+                    <textarea
+                            class="file-editor"
+                            tuiTextarea
+                            [ngModel]="fileContent()"
+                            (ngModelChange)="fileContent.set($event)"
+                    ></textarea>
+                </tui-textfield>
+                @if (hasFileChanges()) {
+                    <footer class="editor-actions">
+                        <button appearance="secondary" tuiButton type="button" (click)="cancelFileChanges()">
+                            Отменить
+                        </button>
+                        <button appearance="primary" tuiButton type="button" (click)="saveFile()">
+                            Сохранить
+                        </button>
+                    </footer>
+                }
+            </section>
         }
-        <span class="footer-spacer"></span>
-        <button
-          appearance="secondary"
-          tuiButton
-          type="button"
-          (click)="observer.complete()"
-        >
-          Отмена
-        </button>
-        <button appearance="primary" tuiButton type="button" (click)="saveItem(observer)">
-          Сохранить
-        </button>
-      </footer>
-    </div>
-  </ng-template>
+
+        <ng-template #rowMenu>
+            <tui-data-list size="s">
+                <button
+                        iconStart="@tui.pencil"
+                        tuiOption
+                        type="button"
+                        (click)="editContextItem()"
+                >
+                    Редактировать
+                </button>
+                <button
+                        iconStart="@tui.trash"
+                        tuiOption
+                        type="button"
+                        (click)="deleteContextItem()"
+                >
+                    Удалить
+                </button>
+            </tui-data-list>
+        </ng-template>
+
+        <ng-template #fieldEditor let-field="field" let-container="container" let-level="level" let-path="path">
+            @if (field.description && field.type !== 'object') {
+                <div class="item-field__hint">{{ field.description }}</div>
+            }
+            @if (field.type === 'object' && field.isList) {
+                <section class="object-list object-card" [style.margin-left.rem]="level * 0.5">
+                    <div class="object-list__head">
+                        <button
+                                appearance="flat"
+                                class="object-toggle"
+                                size="s"
+                                tuiButton
+                                type="button"
+                                (click)="toggleObjectExpanded(path)"
+                        >
+                            <tui-icon
+                                    [icon]="isObjectExpanded(path) ? '@tui.chevron-down' : '@tui.chevron-right'"
+                            />
+                            {{ field.name }}
+                        </button>
+                        @if (isObjectExpanded(path)) {
+                            <button
+                                    appearance="flat"
+                                    iconStart="@tui.plus"
+                                    size="s"
+                                    tuiButton
+                                    type="button"
+                                    (click)="addObjectListItem(container, field)"
+                            >
+                                Добавить объект
+                            </button>
+                        }
+                    </div>
+                    @if (isObjectExpanded(path)) {
+                        @if (field.description) {
+                            <div class="item-field__hint">{{ field.description }}</div>
+                        }
+                    @for (item of objectListValue(container, field); track $index) {
+                        <div class="object-card" [style.margin-left.rem]="level * 0.5">
+                            <div class="object-card__head">
+                                <button
+                                        appearance="flat"
+                                        class="object-toggle"
+                                        size="s"
+                                        tuiButton
+                                        type="button"
+                                        (click)="toggleObjectExpanded(listObjectPath(path, $index))"
+                                >
+                                    <tui-icon
+                                            [icon]="isObjectExpanded(listObjectPath(path, $index)) ? '@tui.chevron-down' : '@tui.chevron-right'"
+                                    />
+                                    {{ field.name }} #{{ $index + 1 }}
+                                </button>
+                                <div class="object-card__actions">
+                                    <button
+                                            appearance="flat-destructive"
+                                            iconStart="@tui.trash"
+                                            size="xs"
+                                            tuiIconButton
+                                            type="button"
+                                            (click)="removeObjectListItem(container, field, $index)"
+                                    >
+                                        Удалить
+                                    </button>
+                                </div>
+                            </div>
+                            @if (isObjectExpanded(listObjectPath(path, $index))) {
+                                @for (child of field.fields || []; track child.id) {
+                                    <div class="item-field">
+                                        <ng-container
+                                                [ngTemplateOutlet]="fieldEditor"
+                                                [ngTemplateOutletContext]="{field: child, container: item, level: level + 1, path: objectPath(listObjectPath(path, $index), child.name)}"
+                                        />
+                                    </div>
+                                }
+                            }
+                        </div>
+                    } @empty {
+                        <div class="muted">Нет объектов</div>
+                    }
+                    }
+                </section>
+            } @else if (field.type === 'object') {
+                <section class="object-card" [style.margin-left.rem]="level * 0.5">
+                    <div class="object-card__head">
+                        <button
+                                appearance="flat"
+                                class="object-toggle"
+                                size="s"
+                                tuiButton
+                                type="button"
+                                (click)="toggleObjectExpanded(path)"
+                        >
+                            <tui-icon
+                                    [icon]="isObjectExpanded(path) ? '@tui.chevron-down' : '@tui.chevron-right'"
+                            />
+                            {{ field.name }}
+                        </button>
+                    </div>
+                    @if (isObjectExpanded(path)) {
+                        @if (field.description) {
+                            <div class="item-field__hint">{{ field.description }}</div>
+                        }
+                        @for (child of field.fields || []; track child.id) {
+                            <div class="item-field">
+                                <ng-container
+                                        [ngTemplateOutlet]="fieldEditor"
+                                        [ngTemplateOutletContext]="{field: child, container: objectValue(container, field), level: level + 1, path: objectPath(path, child.name)}"
+                                />
+                            </div>
+                        }
+                    }
+                </section>
+            } @else if (field.isList && (field.type === 'enum' || field.type === 'reference')) {
+                <tui-textfield
+                        multi
+                        tuiChevron
+                        [stringify]="field.type === 'reference' ? stringifyRef : stringifyIdentity"
+                >
+                    <label tuiLabel>{{ field.name }}</label>
+                    <input
+                            tuiInputChip
+                            [ngModel]="fieldValue(container, field)"
+                            (ngModelChange)="setFieldValue(container, field, $event)"
+                    />
+                    <tui-input-chip *tuiItem/>
+                    <tui-data-list-wrapper
+                            *tuiDropdown
+                            tuiMultiSelectGroup
+                            [items]="enumOrRefItems(field)"
+                    />
+                </tui-textfield>
+            } @else if (field.isList) {
+                <tui-textfield multi>
+                    <label tuiLabel>{{ field.name }}</label>
+                    <input
+                            tuiInputChip
+                            [ngModel]="fieldValue(container, field)"
+                            (ngModelChange)="setFieldValue(container, field, $event)"
+                    />
+                    <tui-input-chip *tuiItem/>
+                </tui-textfield>
+            } @else if (field.type === 'bool') {
+                <label tuiCell class="meta-switch">
+                    <div tuiTitle>{{ field.name }}</div>
+                    <input
+                            tuiSwitch
+                            type="checkbox"
+                            [ngModel]="fieldValue(container, field)"
+                            (ngModelChange)="setFieldValue(container, field, $event)"
+                    />
+                </label>
+            } @else if (field.type === 'enum') {
+                <tui-textfield tuiChevron>
+                    <label tuiLabel>{{ field.name }}</label>
+                    <input
+                            tuiSelect
+                            [ngModel]="fieldValue(container, field)"
+                            (ngModelChange)="setFieldValue(container, field, $event)"
+                    />
+                    <tui-data-list-wrapper *tuiDropdown [items]="field.enumValues || []"/>
+                </tui-textfield>
+            } @else if (field.type === 'reference') {
+                <tui-textfield tuiChevron [stringify]="stringifyRef">
+                    <label tuiLabel>{{ field.name }}</label>
+                    <input
+                            tuiSelect
+                            [ngModel]="fieldValue(container, field)"
+                            (ngModelChange)="setFieldValue(container, field, $event)"
+                    />
+                    <tui-data-list-wrapper *tuiDropdown [items]="referenceOptions(field)"/>
+                </tui-textfield>
+            } @else if (field.type === 'json') {
+                <tui-textfield [tuiTextfieldCleaner]="false">
+                    <label tuiLabel>{{ field.name }}</label>
+                    <textarea
+                            tuiTextarea
+                            [ngModel]="fieldValue(container, field)"
+                            (ngModelChange)="setFieldValue(container, field, $event)"
+                    ></textarea>
+                </tui-textfield>
+            } @else if (field.type === 'int') {
+                <tui-textfield>
+                    <label tuiLabel>{{ field.name }}</label>
+                    <input
+                            tuiInput
+                            type="number"
+                            [ngModel]="fieldValue(container, field)"
+                            (ngModelChange)="setFieldValue(container, field, $event)"
+                    />
+                </tui-textfield>
+            } @else {
+                <tui-textfield>
+                    <label tuiLabel>{{ field.name }}</label>
+                    <input
+                            tuiInput
+                            [ngModel]="fieldValue(container, field)"
+                            (ngModelChange)="setFieldValue(container, field, $event)"
+                    />
+                </tui-textfield>
+            }
+        </ng-template>
+
+        @if (isSchemaType()) {
+            <tui-accordion>
+                <button tuiAccordion>JSON Schema справочника</button>
+                <tui-expand>
+                    <pre>{{ dir.schema.jsonSchema | json }}</pre>
+                </tui-expand>
+            </tui-accordion>
+        }
+    </section>
+
+    <ng-template
+        let-observer
+        [tuiDialogOptions]="{label: itemDialogTitle(), size: 'm'}"
+        [(tuiDialog)]="createOpen"
+    >
+        <div tuiForm class="item-form">
+            @if (formError()) {
+                <div appearance="negative" tuiNotification>{{ formError() }}</div>
+            }
+
+            @for (field of formFields(); track field.id) {
+                <div class="item-field">
+                    @if (isAutoField(field.type)) {
+                        <div
+                                class="auto-field"
+                                [tuiHint]="editingItemId() ? '' : autoGeneratedHint"
+                        >
+                            @if (field.description) {
+                                <div class="item-field__hint">{{ field.description }}</div>
+                            }
+                            <tui-textfield>
+                                <label tuiLabel>{{ field.name }}</label>
+                                <input
+                                        disabled
+                                        tuiInput
+                                        [ngModel]="autoFieldValue(field)"
+                                        [ngModelOptions]="{standalone: true}"
+                                />
+                            </tui-textfield>
+                        </div>
+                    } @else {
+                        <ng-container
+                                [ngTemplateOutlet]="fieldEditor"
+                                [ngTemplateOutletContext]="{field, container: formModel, level: 0, path: field.name}"
+                        />
+                    }
+                </div>
+            }
+
+            <footer>
+                @if (editingItemId() && isListDirectory()) {
+                    <button
+                            appearance="flat-destructive"
+                            iconStart="@tui.trash"
+                            tuiButton
+                            type="button"
+                            (click)="deleteCurrentItem(observer)"
+                    >
+                        Удалить
+                    </button>
+                }
+                <button
+                        appearance="secondary"
+                        tuiButton
+                        type="button"
+                        (click)="observer.complete()"
+                >
+                    Отмена
+                </button>
+                <button appearance="primary" tuiButton type="button" (click)="saveItem(observer)">
+                    Сохранить
+                </button>
+            </footer>
+        </div>
+    </ng-template>
 } @else {
-  <section tuiCardLarge>
-    <header tuiHeader>
-      <hgroup tuiTitle>
-        <h2>Справочник не найден</h2>
-      </hgroup>
-    </header>
-    <a appearance="primary" routerLink="/" tuiButton>На главную</a>
-  </section>
+    <section tuiCardLarge>
+        <header tuiHeader>
+            <hgroup tuiTitle>
+                <h2>Справочник не найден</h2>
+            </hgroup>
+        </header>
+        <a appearance="primary" routerLink="/" tuiButton>На главную</a>
+    </section>
 }
