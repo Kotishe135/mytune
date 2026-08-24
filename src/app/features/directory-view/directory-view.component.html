@@ -279,20 +279,19 @@
                 @if (fileError()) {
                     <div appearance="negative" tuiNotification>{{ fileError() }}</div>
                 }
-                <tui-textfield tuiChevron [stringify]="stringifyFileFormat">
-                    <label tuiLabel>Формат файла</label>
-                    <input tuiSelect [ngModel]="fileFormat()" (ngModelChange)="fileFormat.set($event)"/>
-                    <tui-data-list-wrapper *tuiDropdown [items]="fileFormatValues"/>
-                </tui-textfield>
-                <tui-textfield class="file-content-wrap" [tuiTextfieldCleaner]="false">
-                    <label tuiLabel>Содержимое</label>
-                    <textarea
+                <div class="file-format-row">
+                    <span class="file-format-row__label">Формат файла</span>
+                    <div appearance="neutral" size="s" tuiBadge>{{ stringifyFileFormat(fileFormat()) }}</div>
+                </div>
+                <div class="file-content-wrap">
+                    <span class="file-content-label">Содержимое</span>
+                    <app-code-editor
                             class="file-editor"
-                            tuiTextarea
-                            [ngModel]="fileContent()"
-                            (ngModelChange)="fileContent.set($event)"
-                    ></textarea>
-                </tui-textfield>
+                            [language]="fileFormat()"
+                            [value]="fileContent()"
+                            (valueChange)="fileContent.set($event)"
+                    />
+                </div>
                 @if (hasFileChanges()) {
                     <footer class="editor-actions">
                         <button appearance="secondary" tuiButton type="button" (click)="cancelFileChanges()">

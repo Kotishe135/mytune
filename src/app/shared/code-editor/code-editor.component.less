@@ -1,0 +1,55 @@
+:host {
+  --code-editor-bg: var(--tui-background-elevation-1, #fff);
+  --code-editor-fg: var(--tui-text-primary, #1b1f23);
+  --code-editor-border: var(--tui-border-normal, #d7d8db);
+  --code-editor-caret: var(--tui-text-primary, #1b1f23);
+  --code-editor-selection: color-mix(in srgb, var(--tui-text-action, #526ed3) 24%, transparent);
+  --code-editor-active-line: color-mix(in srgb, var(--tui-background-neutral-1, #f6f6f6) 88%, transparent);
+  --code-editor-gutter-bg: var(--tui-background-neutral-1, #f6f6f6);
+  --code-editor-gutter-fg: var(--tui-text-tertiary, #6b6f76);
+  --code-editor-comment: #6e7781;
+  --code-editor-string: #0a3069;
+  --code-editor-number: #0550ae;
+  --code-editor-bool: #8250df;
+  --code-editor-null: #8250df;
+  --code-editor-keyword: #cf222e;
+  --code-editor-property: #116329;
+  --code-editor-punctuation: #57606a;
+  --code-editor-error: var(--tui-status-negative, #f45725);
+  --code-editor-warning: var(--tui-status-warning, #ff9800);
+
+  display: block;
+  flex: 1;
+  min-block-size: 12rem;
+  block-size: 100%;
+  overflow: hidden;
+  border: 1px solid var(--code-editor-border);
+  border-radius: var(--tui-radius-m);
+  background: var(--code-editor-bg);
+}
+
+@media (prefers-color-scheme: dark) {
+  :host {
+    --code-editor-bg: var(--tui-background-elevation-1, #1e1e1e);
+    --code-editor-fg: var(--tui-text-primary, #e6edf3);
+    --code-editor-border: var(--tui-border-normal, #3d444d);
+    --code-editor-caret: var(--tui-text-primary, #e6edf3);
+    --code-editor-selection: color-mix(in srgb, var(--tui-text-action, #7d9bff) 28%, transparent);
+    --code-editor-active-line: color-mix(in srgb, var(--tui-background-neutral-1, #2d333b) 88%, transparent);
+    --code-editor-gutter-bg: var(--tui-background-neutral-1, #2d333b);
+    --code-editor-gutter-fg: var(--tui-text-tertiary, #9198a1);
+    --code-editor-comment: #9198a1;
+    --code-editor-string: #96d0ff;
+    --code-editor-number: #79c0ff;
+    --code-editor-bool: #d2a8ff;
+    --code-editor-null: #d2a8ff;
+    --code-editor-keyword: #ff7b72;
+    --code-editor-property: #7ee787;
+    --code-editor-punctuation: #c9d1d9;
+  }
+}
+
+.host {
+  block-size: 100%;
+  min-block-size: inherit;
+}

@@ -50,6 +50,8 @@ import {
   JsonFieldEntry,
 } from '../../core/models/directory.models';
 import {DirectoryStoreService} from '../../core/services/directory-store.service';
+import {CodeEditorComponent} from '../../shared/code-editor/code-editor.component';
+import {parseDocument} from 'yaml';
 
 type SortDir = 'asc' | 'desc';
 
@@ -61,6 +63,7 @@ const AUTO_GENERATED_HINT =
   selector: 'app-directory-view',
   standalone: true,
   imports: [
+    CodeEditorComponent,
     FormsModule,
     JsonPipe,
     NgTemplateOutlet,
@@ -136,14 +139,14 @@ export class DirectoryViewComponent {
 
   readonly singleItem = computed(() => this.directory()?.items[0]);
 
-  readonly fileFormatValues = FILE_DIRECTORY_FORMAT_OPTIONS.map((o) => o.value);
   readonly jsonFieldTypeValues = JSON_FIELD_TYPE_OPTIONS.map((o) => o.value);
-  readonly fileFormat = signal<FileDirectoryFormat>('json');
+  readonly fileFormat = computed<FileDirectoryFormat>(
+    () => this.directory()?.fileFormat ?? 'json',
+  );
   readonly fileContent = signal('');
   readonly fileError = signal('');
   readonly singleFormError = signal('');
   private initialSingleSnapshot = '';
-  private initialFileFormat: FileDirectoryFormat = 'json';
   private initialFileContent = '';
 
   readonly fieldNames = computed(
@@ -278,11 +281,7 @@ export class DirectoryViewComponent {
         if (!dir || type !== 'file') {
           return;
         }
-        this.fileFormat.set(
-          (item?.data['format'] as FileDirectoryFormat) ?? dir.fileFormat ?? 'json',
-        );
         this.fileContent.set(String(item?.data['content'] ?? ''));
-        this.initialFileFormat = this.fileFormat();
         this.initialFileContent = this.fileContent();
         this.fileError.set('');
       });
@@ -544,12 +543,20 @@ export class DirectoryViewComponent {
     const format = this.fileFormat();
     const content = this.fileContent();
 
-    if (format === 'json' && content.trim()) {
-      try {
-        JSON.parse(content);
-      } catch {
-        this.fileError.set('Невалидный JSON');
-        return;
+    if (content.trim()) {
+      if (format === 'json') {
+        try {
+          JSON.parse(content);
+        } catch {
+          this.fileError.set('Невалидный JSON');
+          return;
+        }
+      } else {
+        const validationError = this.validateYaml(content);
+        if (validationError) {
+          this.fileError.set(validationError);
+          return;
+        }
       }
     }
 
@@ -561,31 +568,16 @@ export class DirectoryViewComponent {
       this.store.addItem(dir.id, payload);
     }
 
-    this.store.updateDirectory(dir.id, {
-      name: dir.name,
-      description: dir.description,
-      type: dir.type,
-      fileFormat: format,
-      fileSchemaEnabled: dir.fileSchemaEnabled,
-      fileSchemaText: dir.fileSchemaText,
-      schema: dir.schema,
-    });
-
-    this.initialFileFormat = format;
     this.initialFileContent = content;
   }
 
   cancelFileChanges(): void {
-    this.fileFormat.set(this.initialFileFormat);
     this.fileContent.set(this.initialFileContent);
     this.fileError.set('');
   }
 
   hasFileChanges(): boolean {
-    return (
-      this.fileFormat() !== this.initialFileFormat ||
-      this.fileContent() !== this.initialFileContent
-    );
+    return this.fileContent() !== this.initialFileContent;
   }
 
   saveItem(observer: {complete: () => void}): void {
@@ -1413,6 +1405,12 @@ export class DirectoryViewComponent {
       // ignore invalid legacy textarea content
     }
     return {};
+  }
+
+  private validateYaml(content: string): string | null {
+    const doc = parseDocument(content, {prettyErrors: false});
+    const error = doc.errors.find((item) => item.name === 'YAMLParseError');
+    return error?.message ?? null;
   }
 
   private looksLikeUuid(value: string): boolean {

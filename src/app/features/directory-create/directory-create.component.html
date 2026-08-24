@@ -36,7 +36,12 @@
         @if (directoryType === 'file') {
             <tui-textfield tuiChevron [stringify]="stringifyFileFormat">
                 <label tuiLabel>Формат файла</label>
-                <input name="fileFormat" tuiSelect [(ngModel)]="fileFormat"/>
+                <input
+                        name="fileFormat"
+                        tuiSelect
+                        [disabled]="isEdit()"
+                        [(ngModel)]="fileFormat"
+                />
                 <tui-data-list-wrapper *tuiDropdown [items]="fileFormatValues"/>
             </tui-textfield>
 

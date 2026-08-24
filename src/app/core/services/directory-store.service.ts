@@ -119,7 +119,8 @@ export class DirectoryStoreService {
                 name: input.name.trim(),
                 description: input.description.trim(),
                 type: input.type,
-                fileFormat: input.fileFormat,
+                // Format is fixed at creation time for file directories.
+                fileFormat: d.fileFormat ?? input.fileFormat,
                 fileSchemaEnabled: input.fileSchemaEnabled,
                 fileSchemaText: input.fileSchemaText,
                 schema: input.schema,
