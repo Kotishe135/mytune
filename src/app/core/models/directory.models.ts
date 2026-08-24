@@ -105,6 +105,29 @@ export const FIELD_TYPE_OPTIONS: ReadonlyArray<{ value: FieldType; label: string
   {value: 'reference', label: 'Ссылка на справочник'},
 ];
 
+/** Types allowed inside a free-form JSON field configurator (per-object, not schema). */
+export type JsonConfigurableFieldType = Exclude<
+  FieldType,
+  'autoincrement' | 'reference'
+>;
+
+export interface JsonFieldEntry {
+  id: string;
+  name: string;
+  type: JsonConfigurableFieldType;
+  /** Nested entries for object/json; scalar otherwise. */
+  value: unknown;
+  enumValues?: string[];
+}
+
+export const JSON_FIELD_TYPE_OPTIONS: ReadonlyArray<{
+  value: JsonConfigurableFieldType;
+  label: string;
+}> = FIELD_TYPE_OPTIONS.filter(
+  (o): o is {value: JsonConfigurableFieldType; label: string} =>
+    o.value !== 'autoincrement' && o.value !== 'reference',
+);
+
 export const VALIDATION_KIND_OPTIONS: ReadonlyArray<{
   value: ValidationKind;
   label: string;

@@ -65,7 +65,8 @@ export class SchemaBuilderService {
       case 'object':
         return this.buildObjectShape(field.fields ?? []);
       case 'json':
-        return {};
+        // Free-form per object — structure is not part of the shared schema.
+        return {type: 'object', additionalProperties: true};
       case 'enum':
         return {
           type: 'string',

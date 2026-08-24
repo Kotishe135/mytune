@@ -45,6 +45,9 @@ import {
   FieldDefinition,
   FieldType,
   FileDirectoryFormat,
+  JSON_FIELD_TYPE_OPTIONS,
+  JsonConfigurableFieldType,
+  JsonFieldEntry,
 } from '../../core/models/directory.models';
 import {DirectoryStoreService} from '../../core/services/directory-store.service';
 
@@ -134,6 +137,7 @@ export class DirectoryViewComponent {
   readonly singleItem = computed(() => this.directory()?.items[0]);
 
   readonly fileFormatValues = FILE_DIRECTORY_FORMAT_OPTIONS.map((o) => o.value);
+  readonly jsonFieldTypeValues = JSON_FIELD_TYPE_OPTIONS.map((o) => o.value);
   readonly fileFormat = signal<FileDirectoryFormat>('json');
   readonly fileContent = signal('');
   readonly fileError = signal('');
@@ -160,6 +164,8 @@ export class DirectoryViewComponent {
   readonly dirMenuOpen = signal(false);
   readonly contextItemId = signal<string | null>(null);
   readonly expandedObjectKeys = signal<Record<string, boolean>>({});
+  readonly jsonEditModes = signal<Record<string, 'configurator' | 'raw'>>({});
+  readonly jsonModeErrors = signal<Record<string, string>>({});
   readonly pageSizes = PAGE_SIZES;
   readonly page = signal(0);
   readonly pageSize = signal(10);
@@ -508,6 +514,9 @@ export class DirectoryViewComponent {
   stringifyFileFormat = (value: FileDirectoryFormat): string =>
     FILE_DIRECTORY_FORMAT_OPTIONS.find((o) => o.value === value)?.label || value;
 
+  stringifyJsonFieldType = (value: JsonConfigurableFieldType): string =>
+    JSON_FIELD_TYPE_OPTIONS.find((o) => o.value === value)?.label || value;
+
   saveSingleItem(): void {
     this.singleFormError.set('');
     const error = this.persistFormModel(this.singleItem()?.id ?? null);
@@ -706,8 +715,266 @@ export class DirectoryViewComponent {
     container[field.name] = list;
   }
 
+  jsonEntries(
+    container: Record<string, unknown>,
+    field: FieldDefinition,
+  ): JsonFieldEntry[] {
+    const current = container[field.name];
+    if (this.isJsonEntryArray(current)) {
+      return current;
+    }
+    const next = this.objectToJsonEntries(
+      typeof current === 'string' ? this.safeParseJsonObject(current) : current,
+    );
+    container[field.name] = next;
+    return next;
+  }
+
+  jsonListValue(
+    container: Record<string, unknown>,
+    field: FieldDefinition,
+  ): unknown[] {
+    const current = container[field.name];
+    if (Array.isArray(current)) {
+      return current;
+    }
+    const next: unknown[] = [];
+    container[field.name] = next;
+    return next;
+  }
+
+  jsonListItemEntries(
+    container: Record<string, unknown>,
+    field: FieldDefinition,
+    index: number,
+  ): JsonFieldEntry[] {
+    const list = [...this.jsonListValue(container, field)];
+    const item = list[index];
+    if (this.isJsonEntryArray(item)) {
+      return item;
+    }
+    const next = this.objectToJsonEntries(
+      typeof item === 'string' ? this.safeParseJsonObject(item) : item,
+    );
+    list[index] = next;
+    container[field.name] = list;
+    return next;
+  }
+
+  jsonListItemRawText(
+    container: Record<string, unknown>,
+    field: FieldDefinition,
+    index: number,
+  ): string {
+    const item = this.jsonListValue(container, field)[index];
+    if (typeof item === 'string') {
+      return item;
+    }
+    const obj = this.isJsonEntryArray(item)
+      ? this.jsonEntriesToObject(item)
+      : this.coerceJsonObject(item);
+    return JSON.stringify(obj, null, 2);
+  }
+
+  setJsonListItemRawText(
+    container: Record<string, unknown>,
+    field: FieldDefinition,
+    index: number,
+    path: string,
+    text: string,
+  ): void {
+    const list = [...this.jsonListValue(container, field)];
+    list[index] = text;
+    container[field.name] = list;
+    this.clearJsonModeError(path);
+  }
+
+  addJsonListItem(container: Record<string, unknown>, field: FieldDefinition): void {
+    const list = this.jsonListValue(container, field);
+    container[field.name] = [...list, []];
+  }
+
+  removeJsonListItem(
+    container: Record<string, unknown>,
+    field: FieldDefinition,
+    index: number,
+  ): void {
+    container[field.name] = this.jsonListValue(container, field).filter(
+      (_, i) => i !== index,
+    );
+  }
+
+  isJsonRawMode(path: string): boolean {
+    return (this.jsonEditModes()[path] ?? 'configurator') === 'raw';
+  }
+
+  jsonModeError(path: string): string {
+    return this.jsonModeErrors()[path] ?? '';
+  }
+
+  setFieldJsonRawMode(
+    container: Record<string, unknown>,
+    field: FieldDefinition,
+    path: string,
+    raw: boolean,
+  ): void {
+    this.applyJsonRawMode(
+      path,
+      raw,
+      () => container[field.name],
+      (value) => {
+        container[field.name] = value;
+      },
+    );
+  }
+
+  setJsonFieldRawText(
+    container: Record<string, unknown>,
+    field: FieldDefinition,
+    path: string,
+    text: string,
+  ): void {
+    container[field.name] = text;
+    this.clearJsonModeError(path);
+  }
+
+  setJsonListItemRawMode(
+    container: Record<string, unknown>,
+    field: FieldDefinition,
+    index: number,
+    path: string,
+    raw: boolean,
+  ): void {
+    this.applyJsonRawMode(
+      path,
+      raw,
+      () => this.jsonListValue(container, field)[index],
+      (value) => {
+        const list = [...this.jsonListValue(container, field)];
+        list[index] = value;
+        container[field.name] = list;
+      },
+    );
+  }
+
+  addJsonEntry(entries: JsonFieldEntry[]): void {
+    entries.push(this.createJsonEntry());
+  }
+
+  removeJsonEntry(entries: JsonFieldEntry[], index: number): void {
+    entries.splice(index, 1);
+  }
+
+  nestedJsonEntries(entry: JsonFieldEntry): JsonFieldEntry[] {
+    if (this.isJsonEntryArray(entry.value)) {
+      return entry.value;
+    }
+    const next = this.objectToJsonEntries(entry.value);
+    entry.value = next;
+    return next;
+  }
+
+  onJsonEntryTypeChange(
+    entry: JsonFieldEntry,
+    type: JsonConfigurableFieldType,
+  ): void {
+    entry.type = type;
+    entry.value = this.defaultJsonValueForType(type);
+    if (type === 'enum') {
+      entry.enumValues = entry.enumValues?.length ? [...entry.enumValues] : [];
+    } else {
+      delete entry.enumValues;
+    }
+  }
+
+  setJsonEntryEnumValues(entry: JsonFieldEntry, values: string[]): void {
+    entry.enumValues = values;
+    if (entry.value && !values.includes(String(entry.value))) {
+      entry.value = '';
+    }
+  }
+
+  private applyJsonRawMode(
+    path: string,
+    raw: boolean,
+    getValue: () => unknown,
+    setValue: (value: unknown) => void,
+  ): void {
+    const currentMode = this.jsonEditModes()[path] ?? 'configurator';
+    const nextMode = raw ? 'raw' : 'configurator';
+    if (currentMode === nextMode) {
+      return;
+    }
+
+    if (raw) {
+      const current = getValue();
+      const obj = this.isJsonEntryArray(current)
+        ? this.jsonEntriesToObject(current)
+        : this.coerceJsonObject(current);
+      setValue(JSON.stringify(obj, null, 2));
+      this.clearJsonModeError(path);
+      this.jsonEditModes.update((modes) => ({...modes, [path]: 'raw'}));
+      return;
+    }
+
+    const current = getValue();
+    if (typeof current === 'string') {
+      const parsed = this.tryParseJsonObject(current);
+      if (parsed.error) {
+        this.jsonModeErrors.update((errors) => ({
+          ...errors,
+          [path]: parsed.error!,
+        }));
+        return;
+      }
+      setValue(this.objectToJsonEntries(parsed.value ?? {}));
+    } else {
+      setValue(this.objectToJsonEntries(this.coerceJsonObject(current)));
+    }
+
+    this.clearJsonModeError(path);
+    this.jsonEditModes.update((modes) => ({...modes, [path]: 'configurator'}));
+  }
+
+  private clearJsonModeError(path: string): void {
+    this.jsonModeErrors.update((errors) => {
+      if (!errors[path]) {
+        return errors;
+      }
+      const next = {...errors};
+      delete next[path];
+      return next;
+    });
+  }
+
+  private coerceJsonObject(value: unknown): Record<string, unknown> {
+    if (typeof value === 'string') {
+      return this.safeParseJsonObject(value);
+    }
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      return value as Record<string, unknown>;
+    }
+    return {};
+  }
+
+  private tryParseJsonObject(
+    raw: string,
+  ): {value?: Record<string, unknown>; error?: string} {
+    try {
+      const parsed = JSON.parse(raw || '{}');
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return {value: parsed as Record<string, unknown>};
+      }
+      return {error: 'JSON должен быть объектом {...}'};
+    } catch {
+      return {error: 'Невалидный JSON'};
+    }
+  }
+
   private populateFormModel(item?: DirectoryItem): void {
     this.formModel = {};
+    this.jsonEditModes.set({});
+    this.jsonModeErrors.set({});
     for (const field of this.formFields()) {
       const value = item?.data[field.name];
       if (this.isAutoField(field.type)) {
@@ -715,15 +982,19 @@ export class DirectoryViewComponent {
         continue;
       }
       if (field.isList) {
-        this.formModel[field.name] =
-          field.type === 'object'
-            ? this.prepareObjectListValue(field, value)
-            : Array.isArray(value)
-              ? [...value]
-              : [];
+        if (field.type === 'object') {
+          this.formModel[field.name] = this.prepareObjectListValue(field, value);
+        } else if (field.type === 'json') {
+          this.formModel[field.name] = Array.isArray(value)
+            ? value.map((itemValue) => this.objectToJsonEntries(itemValue))
+            : [];
+        } else {
+          this.formModel[field.name] = Array.isArray(value) ? [...value] : [];
+        }
       } else if (field.type === 'json') {
-        this.formModel[field.name] =
-          typeof value === 'string' ? value : JSON.stringify(value ?? {}, null, 2);
+        this.formModel[field.name] = this.objectToJsonEntries(
+          typeof value === 'string' ? this.safeParseJsonObject(value) : value,
+        );
       } else if (field.type === 'object') {
         this.formModel[field.name] = this.prepareObjectValue(field, value);
       } else if (field.type === 'bool') {
@@ -828,6 +1099,14 @@ export class DirectoryViewComponent {
         result[child.name] = this.prepareObjectListValue(child, value);
       } else if (child.type === 'object') {
         result[child.name] = this.prepareObjectValue(child, value);
+      } else if (child.type === 'json' && child.isList) {
+        result[child.name] = Array.isArray(value)
+          ? value.map((itemValue) => this.objectToJsonEntries(itemValue))
+          : [];
+      } else if (child.type === 'json') {
+        result[child.name] = this.objectToJsonEntries(
+          typeof value === 'string' ? this.safeParseJsonObject(value) : value,
+        );
       } else if (child.isList) {
         result[child.name] = Array.isArray(value) ? [...value] : [];
       } else if (child.type === 'bool') {
@@ -843,14 +1122,14 @@ export class DirectoryViewComponent {
     if (field.type === 'object') {
       return field.isList ? [] : this.defaultObjectValue(field);
     }
+    if (field.type === 'json') {
+      return [];
+    }
     if (field.isList) {
       return [];
     }
     if (field.type === 'bool') {
       return false;
-    }
-    if (field.type === 'json') {
-      return '{}';
     }
     return '';
   }
@@ -896,11 +1175,7 @@ export class DirectoryViewComponent {
     }
 
     if (field.type === 'json') {
-      try {
-        return {value: JSON.parse(String(rawValue || '{}'))};
-      } catch {
-        return {value: undefined, error: `Поле «${path}»: невалидный JSON`};
-      }
+      return this.normalizeJsonEntries(rawValue, path);
     }
 
     if (field.type === 'object') {
@@ -938,5 +1213,226 @@ export class DirectoryViewComponent {
     }
 
     return {value: rawValue};
+  }
+
+  private normalizeJsonEntries(
+    rawValue: unknown,
+    path: string,
+  ): {value: Record<string, unknown>; error?: string} {
+    if (typeof rawValue === 'string') {
+      const parsed = this.tryParseJsonObject(rawValue);
+      if (parsed.error) {
+        return {value: {}, error: `Поле «${path}»: ${parsed.error}`};
+      }
+      return {value: parsed.value ?? {}};
+    }
+
+    if (!Array.isArray(rawValue)) {
+      if (rawValue && typeof rawValue === 'object' && !Array.isArray(rawValue)) {
+        return {value: rawValue as Record<string, unknown>};
+      }
+      return {value: {}};
+    }
+
+    if (!this.isJsonEntryArray(rawValue)) {
+      return {value: {}};
+    }
+
+    const entries = rawValue;
+    const names = new Set<string>();
+
+    for (const entry of entries) {
+      const name = entry.name?.trim() ?? '';
+      if (!name) {
+        return {
+          value: {},
+          error: `Поле «${path}»: укажите название для всех ключей`,
+        };
+      }
+      if (names.has(name)) {
+        return {
+          value: {},
+          error: `Поле «${path}»: дублируется ключ «${name}»`,
+        };
+      }
+      names.add(name);
+
+      if (entry.type === 'int') {
+        if (entry.value === '' || entry.value === null || entry.value === undefined) {
+          continue;
+        }
+        if (Number.isNaN(Number(entry.value))) {
+          return {
+            value: {},
+            error: `Поле «${path}.${name}»: ожидается число`,
+          };
+        }
+      }
+
+      if (entry.type === 'object' || entry.type === 'json') {
+        const nested = this.normalizeJsonEntries(
+          entry.value,
+          `${path}.${name}`,
+        );
+        if (nested.error) {
+          return nested;
+        }
+      }
+    }
+
+    return {value: this.jsonEntriesToObject(entries)};
+  }
+
+  private objectToJsonEntries(source: unknown): JsonFieldEntry[] {
+    if (!source || typeof source !== 'object' || Array.isArray(source)) {
+      return [];
+    }
+
+    return Object.entries(source as Record<string, unknown>).map(([name, value]) =>
+      this.valueToJsonEntry(name, value),
+    );
+  }
+
+  private valueToJsonEntry(name: string, value: unknown): JsonFieldEntry {
+    const id = this.newJsonEntryId();
+
+    if (typeof value === 'boolean') {
+      return {id, name, type: 'bool', value};
+    }
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return {id, name, type: 'int', value};
+    }
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      return {
+        id,
+        name,
+        type: 'object',
+        value: this.objectToJsonEntries(value),
+      };
+    }
+    if (Array.isArray(value)) {
+      return {id, name, type: 'string', value: JSON.stringify(value)};
+    }
+    if (typeof value === 'string' && this.looksLikeUuid(value)) {
+      return {id, name, type: 'uuid', value};
+    }
+
+    return {id, name, type: 'string', value: value ?? ''};
+  }
+
+  private jsonEntriesToObject(entries: JsonFieldEntry[]): Record<string, unknown> {
+    const result: Record<string, unknown> = {};
+    for (const entry of entries) {
+      const key = entry.name.trim();
+      if (!key) {
+        continue;
+      }
+      result[key] = this.jsonEntryToValue(entry);
+    }
+    return result;
+  }
+
+  private jsonEntryToValue(entry: JsonFieldEntry): unknown {
+    switch (entry.type) {
+      case 'bool':
+        return Boolean(entry.value);
+      case 'int': {
+        if (entry.value === '' || entry.value === null || entry.value === undefined) {
+          return undefined;
+        }
+        const numberValue = Number(entry.value);
+        return Number.isNaN(numberValue) ? undefined : numberValue;
+      }
+      case 'object':
+      case 'json':
+        return this.jsonEntriesToObject(
+          this.isJsonEntryArray(entry.value) ? entry.value : [],
+        );
+      case 'autogenerated_uuid':
+      case 'uuid':
+      case 'enum':
+      case 'string':
+      default:
+        return entry.value ?? '';
+    }
+  }
+
+  private createJsonEntry(
+    type: JsonConfigurableFieldType = 'string',
+  ): JsonFieldEntry {
+    const entry: JsonFieldEntry = {
+      id: this.newJsonEntryId(),
+      name: '',
+      type,
+      value: this.defaultJsonValueForType(type),
+    };
+    if (type === 'enum') {
+      entry.enumValues = [];
+    }
+    return entry;
+  }
+
+  private defaultJsonValueForType(type: JsonConfigurableFieldType): unknown {
+    switch (type) {
+      case 'bool':
+        return false;
+      case 'int':
+        return '';
+      case 'object':
+      case 'json':
+        return [];
+      case 'autogenerated_uuid':
+        return this.newUuid();
+      default:
+        return '';
+    }
+  }
+
+  private isJsonEntryArray(value: unknown): value is JsonFieldEntry[] {
+    return (
+      Array.isArray(value) &&
+      value.every(
+        (item) =>
+          !!item &&
+          typeof item === 'object' &&
+          !Array.isArray(item) &&
+          'id' in item &&
+          'name' in item &&
+          'type' in item,
+      )
+    );
+  }
+
+  private safeParseJsonObject(raw: string): Record<string, unknown> {
+    try {
+      const parsed = JSON.parse(raw || '{}');
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      // ignore invalid legacy textarea content
+    }
+    return {};
+  }
+
+  private looksLikeUuid(value: string): boolean {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      value,
+    );
+  }
+
+  private newJsonEntryId(): string {
+    return `json-${this.newUuid()}`;
+  }
+
+  private newUuid(): string {
+    if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+      return crypto.randomUUID();
+    }
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+      const r = (Math.random() * 16) | 0;
+      const v = c === 'x' ? r : (r & 0x3) | 0x8;
+      return v.toString(16);
+    });
   }
 }

@@ -328,7 +328,7 @@
         </ng-template>
 
         <ng-template #fieldEditor let-field="field" let-container="container" let-level="level" let-path="path">
-            @if (field.description && field.type !== 'object') {
+            @if (field.description && field.type !== 'object' && field.type !== 'json') {
                 <div class="item-field__hint">{{ field.description }}</div>
             }
             @if (field.type === 'object' && field.isList) {
@@ -440,6 +440,179 @@
                         }
                     }
                 </section>
+            } @else if (field.type === 'json' && field.isList) {
+                <section class="object-list object-card" [style.margin-left.rem]="level * 0.5">
+                    <div class="object-list__head">
+                        <button
+                                appearance="flat"
+                                class="object-toggle"
+                                size="s"
+                                tuiButton
+                                type="button"
+                                (click)="toggleObjectExpanded(path)"
+                        >
+                            <tui-icon
+                                    [icon]="isObjectExpanded(path) ? '@tui.chevron-down' : '@tui.chevron-right'"
+                            />
+                            {{ field.name }}
+                        </button>
+                        @if (isObjectExpanded(path)) {
+                            <button
+                                    appearance="flat"
+                                    iconStart="@tui.plus"
+                                    size="s"
+                                    tuiButton
+                                    type="button"
+                                    (click)="addJsonListItem(container, field)"
+                            >
+                                Добавить объект
+                            </button>
+                        }
+                    </div>
+                    @if (isObjectExpanded(path)) {
+                        @if (field.description) {
+                            <div class="item-field__hint">{{ field.description }}</div>
+                        }
+                        @for (item of jsonListValue(container, field); track $index) {
+                            <div class="object-card" [style.margin-left.rem]="level * 0.5">
+                                <div class="object-card__head">
+                                    <button
+                                            appearance="flat"
+                                            class="object-toggle"
+                                            size="s"
+                                            tuiButton
+                                            type="button"
+                                            (click)="toggleObjectExpanded(listObjectPath(path, $index))"
+                                    >
+                                        <tui-icon
+                                                [icon]="isObjectExpanded(listObjectPath(path, $index)) ? '@tui.chevron-down' : '@tui.chevron-right'"
+                                        />
+                                        {{ field.name }} #{{ $index + 1 }}
+                                    </button>
+                                    <div class="object-card__actions json-config__actions">
+                                        <label tuiCell class="meta-switch json-mode-switch">
+                                            <div tuiTitle>Сырой JSON</div>
+                                            <input
+                                                    tuiSwitch
+                                                    type="checkbox"
+                                                    [ngModel]="isJsonRawMode(listObjectPath(path, $index))"
+                                                    (ngModelChange)="setJsonListItemRawMode(container, field, $index, listObjectPath(path, $index), $event)"
+                                            />
+                                        </label>
+                                        <button
+                                                appearance="flat-destructive"
+                                                iconStart="@tui.trash"
+                                                size="xs"
+                                                tuiIconButton
+                                                type="button"
+                                                (click)="removeJsonListItem(container, field, $index)"
+                                        >
+                                            Удалить
+                                        </button>
+                                    </div>
+                                </div>
+                                @if (isObjectExpanded(listObjectPath(path, $index))) {
+                                    @if (jsonModeError(listObjectPath(path, $index)); as modeError) {
+                                        <div appearance="negative" tuiNotification>{{ modeError }}</div>
+                                    }
+                                    @if (isJsonRawMode(listObjectPath(path, $index))) {
+                                        <tui-textfield [tuiTextfieldCleaner]="false">
+                                            <label tuiLabel>JSON</label>
+                                            <textarea
+                                                    tuiTextarea
+                                                    [ngModel]="jsonListItemRawText(container, field, $index)"
+                                                    (ngModelChange)="setJsonListItemRawText(container, field, $index, listObjectPath(path, $index), $event)"
+                                            ></textarea>
+                                        </tui-textfield>
+                                    } @else {
+                                        <div class="json-config__toolbar">
+                                            <button
+                                                    appearance="flat"
+                                                    iconStart="@tui.plus"
+                                                    size="s"
+                                                    tuiButton
+                                                    type="button"
+                                                    (click)="addJsonEntry(jsonListItemEntries(container, field, $index))"
+                                            >
+                                                Добавить поле
+                                            </button>
+                                        </div>
+                                        <ng-container
+                                                [ngTemplateOutlet]="jsonEntriesEditor"
+                                                [ngTemplateOutletContext]="{entries: jsonListItemEntries(container, field, $index), level: level + 1, path: listObjectPath(path, $index)}"
+                                        />
+                                    }
+                                }
+                            </div>
+                        } @empty {
+                            <div class="muted">Нет объектов</div>
+                        }
+                    }
+                </section>
+            } @else if (field.type === 'json') {
+                <section class="json-config object-card" [style.margin-left.rem]="level * 0.5">
+                    <div class="object-list__head">
+                        <button
+                                appearance="flat"
+                                class="object-toggle"
+                                size="s"
+                                tuiButton
+                                type="button"
+                                (click)="toggleObjectExpanded(path)"
+                        >
+                            <tui-icon
+                                    [icon]="isObjectExpanded(path) ? '@tui.chevron-down' : '@tui.chevron-right'"
+                            />
+                            {{ field.name }}
+                        </button>
+                        <div class="json-config__actions">
+                            <label tuiCell class="meta-switch json-mode-switch">
+                                <div tuiTitle>Сырой JSON</div>
+                                <input
+                                        tuiSwitch
+                                        type="checkbox"
+                                        [ngModel]="isJsonRawMode(path)"
+                                        (ngModelChange)="setFieldJsonRawMode(container, field, path, $event)"
+                                />
+                            </label>
+                            @if (isObjectExpanded(path) && !isJsonRawMode(path)) {
+                                <button
+                                        appearance="flat"
+                                        iconStart="@tui.plus"
+                                        size="s"
+                                        tuiButton
+                                        type="button"
+                                        (click)="addJsonEntry(jsonEntries(container, field))"
+                                >
+                                    Добавить поле
+                                </button>
+                            }
+                        </div>
+                    </div>
+                    @if (isObjectExpanded(path)) {
+                        @if (field.description) {
+                            <div class="item-field__hint">{{ field.description }}</div>
+                        }
+                        @if (jsonModeError(path); as modeError) {
+                            <div appearance="negative" tuiNotification>{{ modeError }}</div>
+                        }
+                        @if (isJsonRawMode(path)) {
+                            <tui-textfield [tuiTextfieldCleaner]="false">
+                                <label tuiLabel>JSON</label>
+                                <textarea
+                                        tuiTextarea
+                                        [ngModel]="fieldValue(container, field)"
+                                        (ngModelChange)="setJsonFieldRawText(container, field, path, $event)"
+                                ></textarea>
+                            </tui-textfield>
+                        } @else {
+                            <ng-container
+                                    [ngTemplateOutlet]="jsonEntriesEditor"
+                                    [ngTemplateOutletContext]="{entries: jsonEntries(container, field), level: level + 1, path}"
+                            />
+                        }
+                    }
+                </section>
             } @else if (field.isList && (field.type === 'enum' || field.type === 'reference')) {
                 <tui-textfield
                         multi
@@ -499,15 +672,6 @@
                     />
                     <tui-data-list-wrapper *tuiDropdown [items]="referenceOptions(field)"/>
                 </tui-textfield>
-            } @else if (field.type === 'json') {
-                <tui-textfield [tuiTextfieldCleaner]="false">
-                    <label tuiLabel>{{ field.name }}</label>
-                    <textarea
-                            tuiTextarea
-                            [ngModel]="fieldValue(container, field)"
-                            (ngModelChange)="setFieldValue(container, field, $event)"
-                    ></textarea>
-                </tui-textfield>
             } @else if (field.type === 'int') {
                 <tui-textfield>
                     <label tuiLabel>{{ field.name }}</label>
@@ -528,6 +692,102 @@
                     />
                 </tui-textfield>
             }
+        </ng-template>
+
+        <ng-template #jsonEntriesEditor let-entries="entries" let-level="level" let-path="path">
+            <div class="json-entries" [style.margin-left.rem]="level > 0 ? 0 : 0">
+                @for (entry of entries; track entry.id) {
+                    <div class="json-entry">
+                        <div class="json-entry__row">
+                            <tui-textfield class="json-entry__name">
+                                <label tuiLabel>Название</label>
+                                <input tuiInput [(ngModel)]="entry.name"/>
+                            </tui-textfield>
+
+                            <tui-textfield class="json-entry__type" tuiChevron [stringify]="stringifyJsonFieldType">
+                                <label tuiLabel>Тип</label>
+                                <input
+                                        tuiSelect
+                                        [ngModel]="entry.type"
+                                        (ngModelChange)="onJsonEntryTypeChange(entry, $event)"
+                                />
+                                <tui-data-list-wrapper *tuiDropdown [items]="jsonFieldTypeValues"/>
+                            </tui-textfield>
+
+                            <button
+                                    appearance="flat-destructive"
+                                    class="json-entry__remove"
+                                    iconStart="@tui.trash"
+                                    size="xs"
+                                    tuiIconButton
+                                    type="button"
+                                    (click)="removeJsonEntry(entries, $index)"
+                            >
+                                Удалить
+                            </button>
+                        </div>
+
+                        @if (entry.type === 'object' || entry.type === 'json') {
+                            <div class="json-entry__nested object-card">
+                                <div class="object-list__head">
+                                    <span class="json-entry__nested-title">Поля</span>
+                                    <button
+                                            appearance="flat"
+                                            iconStart="@tui.plus"
+                                            size="s"
+                                            tuiButton
+                                            type="button"
+                                            (click)="addJsonEntry(nestedJsonEntries(entry))"
+                                    >
+                                        Добавить поле
+                                    </button>
+                                </div>
+                                <ng-container
+                                        [ngTemplateOutlet]="jsonEntriesEditor"
+                                        [ngTemplateOutletContext]="{entries: nestedJsonEntries(entry), level: level + 1, path: objectPath(path, entry.name || ('#' + $index))}"
+                                />
+                            </div>
+                        } @else if (entry.type === 'enum') {
+                            <tui-textfield multi>
+                                <label tuiLabel>Значения enum</label>
+                                <input
+                                        tuiInputChip
+                                        [ngModel]="entry.enumValues || []"
+                                        (ngModelChange)="setJsonEntryEnumValues(entry, $event)"
+                                />
+                                <tui-input-chip *tuiItem/>
+                            </tui-textfield>
+                            <tui-textfield tuiChevron>
+                                <label tuiLabel>Значение</label>
+                                <input tuiSelect [(ngModel)]="entry.value"/>
+                                <tui-data-list-wrapper *tuiDropdown [items]="entry.enumValues || []"/>
+                            </tui-textfield>
+                        } @else if (entry.type === 'bool') {
+                            <label tuiCell class="meta-switch">
+                                <div tuiTitle>Значение</div>
+                                <input tuiSwitch type="checkbox" [(ngModel)]="entry.value"/>
+                            </label>
+                        } @else if (entry.type === 'autogenerated_uuid') {
+                            <tui-textfield>
+                                <label tuiLabel>Значение</label>
+                                <input disabled tuiInput [ngModel]="entry.value" [ngModelOptions]="{standalone: true}"/>
+                            </tui-textfield>
+                        } @else if (entry.type === 'int') {
+                            <tui-textfield>
+                                <label tuiLabel>Значение</label>
+                                <input tuiInput type="number" [(ngModel)]="entry.value"/>
+                            </tui-textfield>
+                        } @else {
+                            <tui-textfield>
+                                <label tuiLabel>Значение</label>
+                                <input tuiInput [(ngModel)]="entry.value"/>
+                            </tui-textfield>
+                        }
+                    </div>
+                } @empty {
+                    <div class="muted">Нет полей — добавьте ключи для этого JSON</div>
+                }
+            </div>
         </ng-template>
 
         @if (isSchemaType()) {
