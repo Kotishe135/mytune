@@ -62,92 +62,88 @@
                 </tui-textfield>
             }
         }
-    </div>
+        @if (isSchemaType()) {
+            <section class="fields-block">
+                <h3 class="fields-block__title">Поля схемы</h3>
 
-    @if (isSchemaType()) {
-        <section class="fields-block">
-            <h3 tuiTitle>
-                Поля схемы
-                <div tuiBadge>{{ fields().length }}</div>
-            </h3>
-
-            <tui-tiles class="tiles" [(order)]="fieldOrder">
-                @for (field of tileFields(); track field.id) {
-                    <tui-tile
-                            [height]="1"
-                            [style.order]="fieldOrder.get($index)"
-                            [width]="1"
-                    >
+                <div
+                        cdkDropList
+                        class="fields-list"
+                        (cdkDropListDropped)="dropField($event)"
+                >
+                    @for (field of tileFields(); track field.id) {
                         <div
-                                tuiCell
+                                cdkDrag
                                 class="field-row"
-                                [class.field-row_locked]="isSystemField(field)"
+                                [cdkDragDisabled]="isSystemField(field)"
                         >
                             @if (isSystemField(field)) {
-                                <tui-icon icon="@tui.lock" class="handle handle_static"/>
+                                <tui-icon icon="@tui.lock" class="field-row__handle field-row__handle_static"/>
                             } @else {
                                 <tui-icon
+                                        cdkDragHandle
                                         icon="@tui.grip-vertical"
-                                        tuiTileHandle
-                                        class="handle"
+                                        class="field-row__handle"
                                 />
                             }
-                            <div tuiTitle>
-                                {{ field.name || 'Без имени' }}
-                                <div tuiSubtitle>
-                                    {{ field.description || stringifyType(field.type) }}
-                                </div>
+                            <div class="field-row__content">
+                                <div class="field-row__name">{{ field.name || 'Без имени' }}</div>
+                                @if (field.description.trim()) {
+                                    <div class="field-row__description">{{ field.description }}</div>
+                                }
                             </div>
-                            <div tuiBadge>{{ typeBadge(field.type) }}</div>
-                            @if (field.isList) {
-                                <div appearance="info" tuiBadge>список</div>
-                            }
-                            <button
-                                    appearance="flat"
-                                    iconStart="@tui.pencil"
-                                    size="xs"
-                                    tuiIconButton
-                                    type="button"
-                                    (click)="openEditField(field)"
-                            >
-                                Редактировать
-                            </button>
-                            @if (!isSystemField(field)) {
+                            <div class="field-row__actions">
+                                <div tuiBadge>{{ typeBadge(field.type) }}</div>
+                                @if (field.isList) {
+                                    <div appearance="info" tuiBadge>список</div>
+                                }
                                 <button
-                                        appearance="flat-destructive"
-                                        iconStart="@tui.trash"
+                                        appearance="flat"
+                                        iconStart="@tui.pencil"
                                         size="xs"
                                         tuiIconButton
                                         type="button"
-                                        (click)="removeField(field.id)"
+                                        (click)="openEditField(field)"
                                 >
-                                    Удалить
+                                    Редактировать
                                 </button>
-                            }
+                                @if (!isSystemField(field)) {
+                                    <button
+                                            appearance="flat-destructive"
+                                            iconStart="@tui.trash"
+                                            size="xs"
+                                            tuiIconButton
+                                            type="button"
+                                            (click)="removeField(field.id)"
+                                    >
+                                        Удалить
+                                    </button>
+                                }
+                            </div>
                         </div>
-                    </tui-tile>
-                }
-            </tui-tiles>
+                    }
+                </div>
 
-            <button
-                    appearance="secondary"
-                    iconStart="@tui.plus"
-                    tuiButton
-                    type="button"
-                    class="add-field"
-                    (click)="openAddField()"
-            >
-                Добавить поле
-            </button>
-        </section>
+                <button
+                        appearance="secondary"
+                        iconStart="@tui.plus"
+                        tuiButton
+                        type="button"
+                        class="add-field"
+                        (click)="openAddField()"
+                >
+                    Добавить поле
+                </button>
+            </section>
 
-        <tui-accordion>
-            <button tuiAccordion>JSON Schema preview</button>
-            <tui-expand>
-                <pre>{{ previewSchema() | json }}</pre>
-            </tui-expand>
-        </tui-accordion>
-    }
+            <tui-accordion>
+                <button tuiAccordion>JSON Schema preview</button>
+                <tui-expand>
+                    <pre>{{ previewSchema() | json }}</pre>
+                </tui-expand>
+            </tui-accordion>
+        }
+    </div>
 
     <footer class="actions">
         <a appearance="secondary" tuiButton [routerLink]="cancelLink()">Отмена</a>
@@ -197,6 +193,16 @@
                 />
             </tui-textfield>
 
+            <tui-textfield>
+                <label tuiLabel>Описание</label>
+                <input
+                        tuiInput
+                        [ngModel]="field.description"
+                        [ngModelOptions]="{standalone: true}"
+                        (ngModelChange)="patchDraft({description: $event})"
+                />
+            </tui-textfield>
+
             <tui-textfield tuiChevron [stringify]="stringifyType">
                 <label tuiLabel>Тип</label>
                 <input
@@ -220,16 +226,6 @@
                         (ngModelChange)="patchDraft({isList: $event})"
                 />
             </label>
-
-            <tui-textfield>
-                <label tuiLabel>Описание</label>
-                <input
-                        tuiInput
-                        [ngModel]="field.description"
-                        [ngModelOptions]="{standalone: true}"
-                        (ngModelChange)="patchDraft({description: $event})"
-                />
-            </tui-textfield>
 
             @if (field.type === 'enum') {
                 <tui-textfield multi>
@@ -276,34 +272,36 @@
                         <div tuiCell class="field-row nested-row">
                             <div tuiTitle>
                                 {{ nested.name || 'Без имени' }}
-                                <div tuiSubtitle>
-                                    {{ nested.description || stringifyType(nested.type) }}
-                                </div>
+                                @if (nested.description.trim()) {
+                                    <div tuiSubtitle>{{ nested.description }}</div>
+                                }
                             </div>
-                            <div tuiBadge>{{ typeBadge(nested.type) }}</div>
-                            @if (nested.isList) {
-                                <div appearance="info" tuiBadge>список</div>
-                            }
-                            <button
-                                    appearance="flat"
-                                    iconStart="@tui.pencil"
-                                    size="xs"
-                                    tuiIconButton
-                                    type="button"
-                                    (click)="openEditNestedField([$index])"
-                            >
-                                Редактировать
-                            </button>
-                            <button
-                                    appearance="flat-destructive"
-                                    iconStart="@tui.trash"
-                                    size="xs"
-                                    tuiIconButton
-                                    type="button"
-                                    (click)="removeNestedField([$index])"
-                            >
-                                Удалить
-                            </button>
+                            <div tuiAccessories>
+                                <div tuiBadge>{{ typeBadge(nested.type) }}</div>
+                                @if (nested.isList) {
+                                    <div appearance="info" tuiBadge>список</div>
+                                }
+                                <button
+                                        appearance="flat"
+                                        iconStart="@tui.pencil"
+                                        size="xs"
+                                        tuiIconButton
+                                        type="button"
+                                        (click)="openEditNestedField([$index])"
+                                >
+                                    Редактировать
+                                </button>
+                                <button
+                                        appearance="flat-destructive"
+                                        iconStart="@tui.trash"
+                                        size="xs"
+                                        tuiIconButton
+                                        type="button"
+                                        (click)="removeNestedField([$index])"
+                                >
+                                    Удалить
+                                </button>
+                            </div>
                         </div>
                     } @empty {
                         <div class="nested-empty">Нет вложенных полей</div>
@@ -469,6 +467,16 @@
                 />
             </tui-textfield>
 
+            <tui-textfield>
+                <label tuiLabel>Описание</label>
+                <input
+                        tuiInput
+                        [ngModel]="field.description"
+                        [ngModelOptions]="{standalone: true}"
+                        (ngModelChange)="patchNestedDraft({description: $event})"
+                />
+            </tui-textfield>
+
             <tui-textfield tuiChevron [stringify]="stringifyType">
                 <label tuiLabel>Тип</label>
                 <input
@@ -491,16 +499,6 @@
                         (ngModelChange)="patchNestedDraft({isList: $event})"
                 />
             </label>
-
-            <tui-textfield>
-                <label tuiLabel>Описание</label>
-                <input
-                        tuiInput
-                        [ngModel]="field.description"
-                        [ngModelOptions]="{standalone: true}"
-                        (ngModelChange)="patchNestedDraft({description: $event})"
-                />
-            </tui-textfield>
 
             @if (field.type === 'enum') {
                 <tui-textfield multi>
@@ -547,34 +545,36 @@
                         <div tuiCell class="field-row nested-row">
                             <div tuiTitle>
                                 {{ nested.name || 'Без имени' }}
-                                <div tuiSubtitle>
-                                    {{ nested.description || stringifyType(nested.type) }}
-                                </div>
+                                @if (nested.description.trim()) {
+                                    <div tuiSubtitle>{{ nested.description }}</div>
+                                }
                             </div>
-                            <div tuiBadge>{{ typeBadge(nested.type) }}</div>
-                            @if (nested.isList) {
-                                <div appearance="info" tuiBadge>список</div>
-                            }
-                            <button
-                                    appearance="flat"
-                                    iconStart="@tui.pencil"
-                                    size="xs"
-                                    tuiIconButton
-                                    type="button"
-                                    (click)="openEditNestedField(nestedPath(nestedEditPath(), $index))"
-                            >
-                                Редактировать
-                            </button>
-                            <button
-                                    appearance="flat-destructive"
-                                    iconStart="@tui.trash"
-                                    size="xs"
-                                    tuiIconButton
-                                    type="button"
-                                    (click)="removeNestedField(nestedPath(nestedEditPath(), $index))"
-                            >
-                                Удалить
-                            </button>
+                            <div tuiAccessories>
+                                <div tuiBadge>{{ typeBadge(nested.type) }}</div>
+                                @if (nested.isList) {
+                                    <div appearance="info" tuiBadge>список</div>
+                                }
+                                <button
+                                        appearance="flat"
+                                        iconStart="@tui.pencil"
+                                        size="xs"
+                                        tuiIconButton
+                                        type="button"
+                                        (click)="openEditNestedField(nestedPath(nestedEditPath(), $index))"
+                                >
+                                    Редактировать
+                                </button>
+                                <button
+                                        appearance="flat-destructive"
+                                        iconStart="@tui.trash"
+                                        size="xs"
+                                        tuiIconButton
+                                        type="button"
+                                        (click)="removeNestedField(nestedPath(nestedEditPath(), $index))"
+                                >
+                                    Удалить
+                                </button>
+                            </div>
                         </div>
                     } @empty {
                         <div class="nested-empty">Нет вложенных полей</div>

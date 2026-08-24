@@ -1,5 +1,6 @@
 import {JsonPipe} from '@angular/common';
 import {Component, computed, inject, OnInit, signal} from '@angular/core';
+import {CdkDrag, CdkDragDrop, CdkDragHandle, CdkDropList, moveItemInArray} from '@angular/cdk/drag-drop';
 import {FormsModule} from '@angular/forms';
 import {ActivatedRoute, Router, RouterLink} from '@angular/router';
 import {
@@ -24,7 +25,6 @@ import {
   TuiSelect,
   TuiSwitch,
   TuiTextarea,
-  TuiTiles,
 } from '@taiga-ui/kit';
 import {TuiCardLarge, TuiForm, TuiHeader} from '@taiga-ui/layout';
 import {
@@ -48,6 +48,9 @@ import {ValidationCatalogService} from '../../core/services/validation-catalog.s
   selector: 'app-directory-create',
   standalone: true,
   imports: [
+    CdkDrag,
+    CdkDragHandle,
+    CdkDropList,
     FormsModule,
     JsonPipe,
     RouterLink,
@@ -72,7 +75,6 @@ import {ValidationCatalogService} from '../../core/services/validation-catalog.s
     TuiSwitch,
     TuiTextarea,
     TuiTextfield,
-    TuiTiles,
     TuiTitle,
   ],
   templateUrl: './directory-create.component.html',
@@ -99,7 +101,6 @@ export class DirectoryCreateComponent implements OnInit {
   fileFormat: FileDirectoryFormat = 'json';
   fileSchemaEnabled = false;
   fileSchemaText = '';
-  fieldOrder = new Map<number, number>();
 
   readonly isEdit = signal(false);
   readonly fields = signal<FieldDefinition[]>([]);
@@ -210,7 +211,6 @@ export class DirectoryCreateComponent implements OnInit {
     this.directoryType = type;
     if (type === 'file') {
       this.fields.set([]);
-      this.fieldOrder = new Map();
       return;
     }
 
@@ -222,7 +222,6 @@ export class DirectoryCreateComponent implements OnInit {
   }
 
   openAddField(): void {
-    this.applyOrder();
     this.draftMode.set('add');
     this.draftError.set('');
     this.draft.set({
@@ -239,7 +238,6 @@ export class DirectoryCreateComponent implements OnInit {
   }
 
   openEditField(field: FieldDefinition): void {
-    this.applyOrder();
     this.draftMode.set('edit');
     this.draftError.set('');
     const cloned = this.cloneField(field);
@@ -573,16 +571,26 @@ export class DirectoryCreateComponent implements OnInit {
       );
     }
 
-    this.fieldOrder = new Map();
     this.closeFieldDrawer();
   }
 
   removeField(fieldId: string): void {
-    this.applyOrder();
     this.fields.update((list) =>
       list.filter((f) => !(f.id === fieldId && !this.isSystemField(f))),
     );
-    this.fieldOrder = new Map();
+  }
+
+  dropField(event: CdkDragDrop<FieldDefinition[]>): void {
+    if (event.previousIndex === event.currentIndex) {
+      return;
+    }
+
+    const reordered = [...this.tileFields()];
+    moveItemInArray(reordered, event.previousIndex, event.currentIndex);
+
+    const idField = reordered.find((field) => this.isSystemField(field));
+    const userFields = reordered.filter((field) => !this.isSystemField(field));
+    this.fields.set(idField ? [idField, ...userFields] : userFields);
   }
 
   serverValidatorIds(type: FieldType): string[] {
@@ -593,7 +601,8 @@ export class DirectoryCreateComponent implements OnInit {
     FIELD_TYPE_OPTIONS.find((o) => o.value === value)?.label || value;
 
   typeBadge(type: FieldType): string {
-    return type;
+    const label = FIELD_TYPE_OPTIONS.find((o) => o.value === type)?.label ?? type;
+    return label.replace(/\s*\([^)]*\)\s*$/, '').trim() || label;
   }
 
   stringifyDirectoryType = (value: DirectoryType): string =>
@@ -621,9 +630,6 @@ export class DirectoryCreateComponent implements OnInit {
 
   save(): void {
     this.error.set('');
-    if (this.isSchemaType()) {
-      this.applyOrder();
-    }
 
     const name = this.name.trim();
     if (!name) {
@@ -690,12 +696,6 @@ export class DirectoryCreateComponent implements OnInit {
     void this.router.navigate(['/directories', directory.id]);
   }
 
-  private orderedFields(): FieldDefinition[] {
-    const idField = this.idField();
-    const ordered = this.orderedUserFields();
-    return idField ? [idField, ...ordered] : ordered;
-  }
-
   private schemaFieldsForType(): FieldDefinition[] {
     if (this.directoryType === 'list') {
       return this.schemaBuilder.ensureIdField(this.fields());
@@ -703,27 +703,8 @@ export class DirectoryCreateComponent implements OnInit {
     return this.fields().filter((f) => !this.isSystemField(f));
   }
 
-  private orderedUserFields(): FieldDefinition[] {
-    const list = this.tileFields();
-    return list
-      .map((field, index) => ({field, index}))
-      .sort(
-        (a, b) =>
-          (this.fieldOrder.get(a.index) ?? a.index) -
-          (this.fieldOrder.get(b.index) ?? b.index),
-      )
-      .map(({field}) => field)
-      .sort((a, b) => Number(this.isSystemField(b)) - Number(this.isSystemField(a)));
-  }
-
-  private applyOrder(): void {
-    const next = this.orderedFields();
-    this.fields.set(next);
-    this.fieldOrder = new Map();
-  }
-
   private siblingNames(fieldId: string): string[] {
-    return this.orderedFields()
+    return this.tileFields()
       .filter((f) => f.id !== fieldId)
       .map((f) => f.name.trim());
   }
