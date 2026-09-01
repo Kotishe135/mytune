@@ -2,9 +2,17 @@ html,
 body {
   height: 100%;
   margin: 0;
-  font: var(--tui-font-text-m);
+  font: var(--tui-typography-body-m);
   background: var(--tui-background-base);
   color: var(--tui-text-primary);
+}
+
+/* Taiga UI 5 typography aliases (legacy --tui-font-* names) */
+:root {
+  --tui-font-text-m: var(--tui-typography-body-m);
+  --tui-font-text-s: var(--tui-typography-body-s);
+  --tui-font-heading-4: var(--tui-typography-heading-h4);
+  --tui-font-heading-6: var(--tui-typography-heading-h6);
 }
 
 * {

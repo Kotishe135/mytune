@@ -1,4 +1,3 @@
-import {JsonPipe} from '@angular/common';
 import {Component, computed, inject, OnInit, signal} from '@angular/core';
 import {CdkDrag, CdkDragDrop, CdkDragHandle, CdkDropList, moveItemInArray} from '@angular/cdk/drag-drop';
 import {FormsModule} from '@angular/forms';
@@ -16,7 +15,6 @@ import {
   TuiTitle,
 } from '@taiga-ui/core';
 import {
-  TuiAccordion,
   TuiBadge,
   TuiChevron,
   TuiDataListWrapper,
@@ -26,7 +24,7 @@ import {
   TuiSwitch,
   TuiTextarea,
 } from '@taiga-ui/kit';
-import {TuiCardLarge, TuiForm, TuiHeader} from '@taiga-ui/layout';
+import {TuiCardLarge, TuiForm} from '@taiga-ui/layout';
 import {
   DIRECTORY_TYPE_OPTIONS,
   FIELD_TYPE_OPTIONS,
@@ -43,6 +41,7 @@ import {DirectoryStoreService} from '../../core/services/directory-store.service
 import {ItemFactoryService} from '../../core/services/item-factory.service';
 import {SchemaBuilderService} from '../../core/services/schema-builder.service';
 import {ValidationCatalogService} from '../../core/services/validation-catalog.service';
+import {CodeEditorComponent} from '../../shared/code-editor/code-editor.component';
 
 @Component({
   selector: 'app-directory-create',
@@ -51,10 +50,9 @@ import {ValidationCatalogService} from '../../core/services/validation-catalog.s
     CdkDrag,
     CdkDragHandle,
     CdkDropList,
+    CodeEditorComponent,
     FormsModule,
-    JsonPipe,
     RouterLink,
-    TuiAccordion,
     TuiBadge,
     TuiButton,
     TuiCardLarge,
@@ -64,7 +62,6 @@ import {ValidationCatalogService} from '../../core/services/validation-catalog.s
     TuiDataListWrapper,
     TuiDrawer,
     TuiForm,
-    TuiHeader,
     TuiIcon,
     TuiInput,
     TuiInputChip,
@@ -115,13 +112,9 @@ export class DirectoryCreateComponent implements OnInit {
   readonly nestedDraftError = signal('');
   readonly nestedEditPath = signal<number[]>([]);
 
-  readonly previewSchema = computed(() =>
-    this.schemaBuilder.buildJsonSchema(this.schemaFieldsForType(), this.name.trim() || 'directory'),
-  );
-
-  readonly groupName = computed(
-    () => this.store.getGroup(this.groupId)?.name || '—',
-  );
+  onFileSchemaChange(value: string): void {
+    this.fileSchemaText = value;
+  }
 
   readonly directoryIds = computed(() =>
     this.store
@@ -211,8 +204,12 @@ export class DirectoryCreateComponent implements OnInit {
     this.directoryType = type;
     if (type === 'file') {
       this.fields.set([]);
+      this.fileSchemaEnabled = false;
       return;
     }
+
+    this.fileSchemaEnabled = false;
+    this.fileSchemaText = '';
 
     if (type === 'list') {
       this.fields.set(this.schemaBuilder.ensureIdField(this.fields()));
@@ -603,6 +600,11 @@ export class DirectoryCreateComponent implements OnInit {
   typeBadge(type: FieldType): string {
     const label = FIELD_TYPE_OPTIONS.find((o) => o.value === type)?.label ?? type;
     return label.replace(/\s*\([^)]*\)\s*$/, '').trim() || label;
+  }
+
+  fieldTypeLabel(field: FieldDefinition): string {
+    const type = this.typeBadge(field.type);
+    return field.isList ? `${type} · Список` : type;
   }
 
   stringifyDirectoryType = (value: DirectoryType): string =>

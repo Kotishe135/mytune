@@ -1,154 +1,136 @@
-<section tuiCardLarge class="page">
-    <header tuiHeader>
-        <hgroup tuiTitle>
-            <h2>{{ pageTitle() }}</h2>
-            <p tuiSubtitle>Группа: {{ groupName() }}</p>
-        </hgroup>
-    </header>
+<div class="page">
+    <h1 class="page__title" tuiTitle="l">{{ pageTitle() }}</h1>
 
     @if (error()) {
         <div appearance="negative" tuiNotification>{{ error() }}</div>
     }
 
-    <div tuiForm class="meta">
-        <tui-textfield>
-            <label tuiLabel>Название</label>
-            <input name="name" tuiInput [(ngModel)]="name"/>
-        </tui-textfield>
-
-        <tui-textfield [tuiTextfieldCleaner]="false">
-            <label tuiLabel>Описание</label>
-            <textarea name="description" tuiTextarea [(ngModel)]="description"></textarea>
-        </tui-textfield>
-
-        <tui-textfield tuiChevron [stringify]="stringifyDirectoryType">
-            <label tuiLabel>Тип справочника</label>
-            <input
-                    name="directoryType"
-                    tuiSelect
-                    [disabled]="isEdit()"
-                    [ngModel]="directoryType"
-                    (ngModelChange)="onDirectoryTypeChange($event)"
-            />
-            <tui-data-list-wrapper *tuiDropdown [items]="directoryTypeValues"/>
-        </tui-textfield>
-
-        @if (directoryType === 'file') {
-            <tui-textfield tuiChevron [stringify]="stringifyFileFormat">
-                <label tuiLabel>Формат файла</label>
-                <input
-                        name="fileFormat"
-                        tuiSelect
-                        [disabled]="isEdit()"
-                        [(ngModel)]="fileFormat"
-                />
-                <tui-data-list-wrapper *tuiDropdown [items]="fileFormatValues"/>
+    <section tuiCardLarge class="block block_meta">
+        <div tuiForm class="block__form">
+            <tui-textfield>
+                <label tuiLabel>Название</label>
+                <input name="name" tuiInput [(ngModel)]="name"/>
             </tui-textfield>
 
-            <label tuiCell class="meta-switch">
-                <div tuiTitle>Нужна JSON Schema</div>
+            <tui-textfield [tuiTextfieldCleaner]="false">
+                <label tuiLabel>Описание</label>
+                <textarea name="description" tuiTextarea [(ngModel)]="description"></textarea>
+            </tui-textfield>
+
+            <tui-textfield tuiChevron [stringify]="stringifyDirectoryType">
+                <label tuiLabel>Тип</label>
                 <input
-                        tuiSwitch
-                        type="checkbox"
-                        [(ngModel)]="fileSchemaEnabled"
-                        name="fileSchemaEnabled"
+                        name="directoryType"
+                        tuiSelect
+                        [disabled]="isEdit()"
+                        [ngModel]="directoryType"
+                        (ngModelChange)="onDirectoryTypeChange($event)"
                 />
-            </label>
+                <tui-data-list-wrapper *tuiDropdown [items]="directoryTypeValues"/>
+            </tui-textfield>
 
-            @if (fileSchemaEnabled) {
-                <tui-textfield class="schema-field" [tuiTextfieldCleaner]="false">
-                    <label tuiLabel>JSON Schema (ручной ввод)</label>
-                    <textarea
-                            class="schema-editor"
-                            name="fileSchemaText"
-                            tuiTextarea
-                            [(ngModel)]="fileSchemaText"
-                    ></textarea>
+            @if (directoryType === 'file') {
+                <tui-textfield tuiChevron [stringify]="stringifyFileFormat">
+                    <label tuiLabel>Формат файла</label>
+                    <input
+                            name="fileFormat"
+                            tuiSelect
+                            [disabled]="isEdit()"
+                            [(ngModel)]="fileFormat"
+                    />
+                    <tui-data-list-wrapper *tuiDropdown [items]="fileFormatValues"/>
                 </tui-textfield>
-            }
-        }
-        @if (isSchemaType()) {
-            <section class="fields-block">
-                <h3 class="fields-block__title">Поля схемы</h3>
 
-                <div
-                        cdkDropList
-                        class="fields-list"
-                        (cdkDropListDropped)="dropField($event)"
-                >
-                    @for (field of tileFields(); track field.id) {
-                        <div
-                                cdkDrag
-                                class="field-row"
-                                [cdkDragDisabled]="isSystemField(field)"
-                        >
-                            @if (isSystemField(field)) {
-                                <tui-icon icon="@tui.lock" class="field-row__handle field-row__handle_static"/>
-                            } @else {
-                                <tui-icon
-                                        cdkDragHandle
-                                        icon="@tui.grip-vertical"
-                                        class="field-row__handle"
-                                />
-                            }
-                            <div class="field-row__content">
-                                <div class="field-row__name">{{ field.name || 'Без имени' }}</div>
-                                @if (field.description.trim()) {
-                                    <div class="field-row__description">{{ field.description }}</div>
-                                }
-                            </div>
-                            <div class="field-row__actions">
-                                <div tuiBadge>{{ typeBadge(field.type) }}</div>
-                                @if (field.isList) {
-                                    <div appearance="info" tuiBadge>список</div>
-                                }
-                                <button
-                                        appearance="flat"
-                                        iconStart="@tui.pencil"
-                                        size="xs"
-                                        tuiIconButton
-                                        type="button"
-                                        (click)="openEditField(field)"
-                                >
-                                    Редактировать
-                                </button>
-                                @if (!isSystemField(field)) {
-                                    <button
-                                            appearance="flat-destructive"
-                                            iconStart="@tui.trash"
-                                            size="xs"
-                                            tuiIconButton
-                                            type="button"
-                                            (click)="removeField(field.id)"
-                                    >
-                                        Удалить
-                                    </button>
-                                }
-                            </div>
-                        </div>
-                    }
+                <div class="form-switch">
+                    <span class="form-switch__label">Указать JSON schema</span>
+                    <input
+                            tuiSwitch
+                            type="checkbox"
+                            name="fileSchemaEnabled"
+                            [(ngModel)]="fileSchemaEnabled"
+                    />
                 </div>
+            }
+        </div>
+    </section>
 
-                <button
-                        appearance="secondary"
-                        iconStart="@tui.plus"
-                        tuiButton
-                        type="button"
-                        class="add-field"
-                        (click)="openAddField()"
-                >
-                    Добавить поле
-                </button>
-            </section>
+    @if (isSchemaType()) {
+        <section tuiCardLarge class="block block_fields">
+            <h2 class="block_fields__title" tuiTitle="m">Поля</h2>
 
-            <tui-accordion>
-                <button tuiAccordion>JSON Schema preview</button>
-                <tui-expand>
-                    <pre>{{ previewSchema() | json }}</pre>
-                </tui-expand>
-            </tui-accordion>
-        }
-    </div>
+            <div
+                    cdkDropList
+                    class="fields-list"
+                    (cdkDropListDropped)="dropField($event)"
+            >
+                @for (field of tileFields(); track field.id) {
+                    <div
+                            cdkDrag
+                            class="field-row"
+                            [cdkDragDisabled]="isSystemField(field)"
+                    >
+                        @if (isSystemField(field)) {
+                            <tui-icon icon="@tui.lock" class="field-row__handle field-row__handle_static"/>
+                        } @else {
+                            <tui-icon
+                                    cdkDragHandle
+                                    icon="@tui.grip-vertical"
+                                    class="field-row__handle"
+                            />
+                        }
+                        <button
+                                class="field-row__content"
+                                type="button"
+                                (click)="openEditField(field)"
+                        >
+                            <span class="field-row__type">{{ fieldTypeLabel(field) }}</span>
+                            <span class="field-row__name">{{ field.name || 'Без имени' }}</span>
+                            @if (field.description.trim()) {
+                                <span class="field-row__description">{{ field.description }}</span>
+                            }
+                        </button>
+                        @if (!isSystemField(field)) {
+                            <button
+                                    appearance="flat-destructive"
+                                    iconStart="@tui.trash"
+                                    size="s"
+                                    tuiIconButton
+                                    type="button"
+                                    class="field-row__delete"
+                                    (click)="removeField(field.id)"
+                            >
+                                Удалить
+                            </button>
+                        }
+                    </div>
+                }
+            </div>
+
+            <button
+                    appearance="flat"
+                    iconStart="@tui.plus"
+                    size="m"
+                    tuiButton
+                    type="button"
+                    class="add-field"
+                    (click)="openAddField()"
+            >
+                Поле
+            </button>
+        </section>
+    }
+
+    @if (directoryType === 'file' && fileSchemaEnabled) {
+        <section tuiCardLarge class="block block_schema">
+            <h2 class="block_fields__title" tuiTitle="m">JSON schema</h2>
+            <app-code-editor
+                    class="file-editor"
+                    language="json"
+                    [value]="fileSchemaText"
+                    (valueChange)="onFileSchemaChange($event)"
+            />
+        </section>
+    }
 
     <footer class="actions">
         <a appearance="secondary" tuiButton [routerLink]="cancelLink()">Отмена</a>
@@ -156,7 +138,7 @@
             {{ saveLabel() }}
         </button>
     </footer>
-</section>
+</div>
 
 <tui-drawer
         *tuiPopup="fieldDrawerOpen()"
