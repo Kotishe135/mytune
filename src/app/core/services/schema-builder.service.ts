@@ -60,6 +60,7 @@ export class SchemaBuilderService {
       case 'bool':
         return {type: 'boolean'};
       case 'int':
+        return {type: 'number'};
       case 'autoincrement':
         return {type: 'integer'};
       case 'object':

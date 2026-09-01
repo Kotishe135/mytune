@@ -1,0 +1,38 @@
+<div class="page">
+    <h1 class="page__title" tuiTitle="l">{{ pageTitle() }}</h1>
+
+    @if (formError()) {
+        <div appearance="negative" tuiNotification>{{ formError() }}</div>
+    }
+
+    <section tuiCardLarge class="block">
+        <app-directory-item-fields
+                [editingItemId]="editingItemId()"
+                [fields]="formFields()"
+        />
+    </section>
+
+    <footer class="actions actions_split">
+        @if (editingItemId()) {
+            <button
+                    appearance="flat-destructive"
+                    iconStart="@tui.trash"
+                    tuiButton
+                    type="button"
+                    (click)="deleteItem()"
+            >
+                Удалить
+            </button>
+        } @else {
+            <span></span>
+        }
+        <div class="actions__right">
+            <button appearance="secondary" tuiButton type="button" (click)="cancel()">
+                Отмена
+            </button>
+            <button appearance="primary" tuiButton type="button" (click)="save()">
+                Сохранить
+            </button>
+        </div>
+    </footer>
+</div>

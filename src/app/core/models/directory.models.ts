@@ -95,7 +95,7 @@ export interface AppStoreState {
 export const FIELD_TYPE_OPTIONS: ReadonlyArray<{ value: FieldType; label: string }> = [
   {value: 'string', label: 'Строка (string)'},
   {value: 'bool', label: 'Булево (bool)'},
-  {value: 'int', label: 'Число (int)'},
+  {value: 'int', label: 'Число (number)'},
   {value: 'object', label: 'Объект (object)'},
   {value: 'json', label: 'JSON'},
   {value: 'enum', label: 'Перечисление (enum)'},
@@ -108,16 +108,16 @@ export const FIELD_TYPE_OPTIONS: ReadonlyArray<{ value: FieldType; label: string
 /** Types allowed inside a free-form JSON field configurator (per-object, not schema). */
 export type JsonConfigurableFieldType = Exclude<
   FieldType,
-  'autoincrement' | 'reference'
+  'autoincrement' | 'reference' | 'json' | 'enum'
 >;
 
 export interface JsonFieldEntry {
   id: string;
   name: string;
   type: JsonConfigurableFieldType;
-  /** Nested entries for object/json; scalar otherwise. */
+  isList?: boolean;
+  /** Nested entries for object; scalar or list values otherwise. */
   value: unknown;
-  enumValues?: string[];
 }
 
 export const JSON_FIELD_TYPE_OPTIONS: ReadonlyArray<{
@@ -125,7 +125,10 @@ export const JSON_FIELD_TYPE_OPTIONS: ReadonlyArray<{
   label: string;
 }> = FIELD_TYPE_OPTIONS.filter(
   (o): o is {value: JsonConfigurableFieldType; label: string} =>
-    o.value !== 'autoincrement' && o.value !== 'reference',
+    o.value !== 'autoincrement' &&
+    o.value !== 'reference' &&
+    o.value !== 'json' &&
+    o.value !== 'enum',
 );
 
 export const VALIDATION_KIND_OPTIONS: ReadonlyArray<{
@@ -133,8 +136,8 @@ export const VALIDATION_KIND_OPTIONS: ReadonlyArray<{
   label: string;
 }> = [
   {value: 'required', label: 'Обязательное'},
-  {value: 'min', label: 'Минимум (int)'},
-  {value: 'max', label: 'Максимум (int)'},
+  {value: 'min', label: 'Минимум (число)'},
+  {value: 'max', label: 'Максимум (число)'},
   {value: 'minLength', label: 'Мин. длина строки'},
   {value: 'maxLength', label: 'Макс. длина строки'},
   {value: 'regex', label: 'Regex'},

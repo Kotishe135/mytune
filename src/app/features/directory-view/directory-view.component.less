@@ -42,6 +42,21 @@ header[tuiHeader] {
   min-inline-size: 18rem;
 }
 
+.dropdown-panel_filters {
+  min-inline-size: 24rem;
+}
+
+.filter-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 0.5rem;
+  align-items: end;
+}
+
+.filter-row__remove {
+  margin-block-end: 0.15rem;
+}
+
 .table-panel {
   display: flex;
   flex-direction: column;
@@ -299,6 +314,16 @@ pre {
   .header-actions {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .filter-row {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .filter-row__remove {
+    justify-self: end;
+    margin-block-end: 0;
   }
 
   .json-entry__row {

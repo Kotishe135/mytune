@@ -4,6 +4,7 @@ import {HomeComponent} from './features/home/home.component';
 import {DirectoryCreateComponent} from './features/directory-create/directory-create.component';
 import {DirectoryViewComponent} from './features/directory-view/directory-view.component';
 import {FieldEditComponent} from './features/field-edit/field-edit.component';
+import {ObjectEditComponent} from './features/object-edit/object-edit.component';
 
 export const routes: Routes = [
   {
@@ -26,6 +27,10 @@ export const routes: Routes = [
       {
         path: 'directories/:id/edit/fields/:fieldId',
         component: FieldEditComponent,
+      },
+      {
+        path: 'directories/:id/items/:itemId',
+        component: ObjectEditComponent,
       },
       {
         path: 'directories/:id',
