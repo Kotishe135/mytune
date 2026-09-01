@@ -1,0 +1,258 @@
+<div class="page">
+    <h1 class="page__title" tuiTitle="l">{{ pageTitle() }}</h1>
+
+    @if (error()) {
+        <div appearance="negative" tuiNotification>{{ error() }}</div>
+    }
+
+    <section tuiCardLarge class="block block_meta">
+        <div tuiForm class="block__form">
+            <tui-textfield>
+                <label tuiLabel>Имя</label>
+                <input
+                        name="fieldName"
+                        tuiInput
+                        [disabled]="isSystemField()"
+                        [ngModel]="field().name"
+                        (ngModelChange)="patchField({name: $event})"
+                />
+            </tui-textfield>
+
+            <tui-textfield>
+                <label tuiLabel>Описание</label>
+                <input
+                        name="fieldDescription"
+                        tuiInput
+                        [ngModel]="field().description"
+                        (ngModelChange)="patchField({description: $event})"
+                />
+            </tui-textfield>
+
+            <tui-textfield tuiChevron [stringify]="stringifyType" [disabledItemHandler]="disabledFieldTypeHandler">
+                <label tuiLabel>Тип</label>
+                <input
+                        name="fieldType"
+                        tuiSelect
+                        [disabled]="isSystemField()"
+                        [ngModel]="field().type"
+                        (ngModelChange)="patchField({type: $event})"
+                />
+                <tui-data-list-wrapper
+                        *tuiDropdown
+                        [items]="fieldTypeValues"
+                        [itemContent]="fieldTypeItem"
+                />
+            </tui-textfield>
+
+            <div class="form-switch">
+                <span class="form-switch__label">Список значений</span>
+                <input
+                        tuiSwitch
+                        type="checkbox"
+                        name="fieldIsList"
+                        [disabled]="isSystemField() || !schemaBuilder.typeSupportsList(field().type)"
+                        [ngModel]="field().isList"
+                        (ngModelChange)="patchField({isList: $event})"
+                />
+            </div>
+
+            @if (field().type === 'enum') {
+                <tui-textfield multi>
+                    <label tuiLabel>Значения enum</label>
+                    <input
+                            tuiInputChip
+                            [ngModel]="field().enumValues || []"
+                            (ngModelChange)="patchField({enumValues: $event})"
+                    />
+                    <tui-input-chip *tuiItem/>
+                </tui-textfield>
+            }
+
+            @if (field().type === 'reference') {
+                <tui-textfield tuiChevron [stringify]="stringifyDirectory">
+                    <label tuiLabel>Справочник</label>
+                    <input
+                            tuiSelect
+                            [ngModel]="field().referenceDirectoryId || null"
+                            (ngModelChange)="patchField({referenceDirectoryId: $event})"
+                    />
+                    <tui-data-list-wrapper *tuiDropdown [items]="directoryIds()"/>
+                </tui-textfield>
+            }
+        </div>
+    </section>
+
+    @if (field().type === 'object') {
+        <section tuiCardLarge class="block block_fields">
+            <h2 class="block_fields__title" tuiTitle="m">Поля</h2>
+
+            <div
+                    cdkDropList
+                    class="fields-list"
+                    (cdkDropListDropped)="dropNestedField($event)"
+            >
+                @for (nested of field().fields ?? []; track nested.id) {
+                    <div cdkDrag class="field-row">
+                        <tui-icon
+                                cdkDragHandle
+                                icon="@tui.grip-vertical"
+                                class="field-row__handle"
+                        />
+                        <button
+                                class="field-row__content"
+                                type="button"
+                                (click)="openNestedField(nested.id)"
+                        >
+                            <span class="field-row__type">{{ fieldTypeLabel(nested) }}</span>
+                            <span class="field-row__name">{{ nested.name || 'Без имени' }}</span>
+                            @if (nested.description.trim()) {
+                                <span class="field-row__description">{{ nested.description }}</span>
+                            }
+                        </button>
+                        <button
+                                appearance="flat-destructive"
+                                iconStart="@tui.trash"
+                                size="s"
+                                tuiIconButton
+                                type="button"
+                                class="field-row__delete"
+                                (click)="removeNestedField(nested.id)"
+                        >
+                            Удалить
+                        </button>
+                    </div>
+                }
+            </div>
+
+            <button
+                    appearance="flat"
+                    iconStart="@tui.plus"
+                    size="m"
+                    tuiButton
+                    type="button"
+                    class="add-field"
+                    (click)="openAddNestedField()"
+            >
+                Вложенное поле
+            </button>
+        </section>
+    }
+
+    <section tuiCardLarge class="block block_validations">
+        <h2 class="block_fields__title" tuiTitle="m">Валидация</h2>
+
+        <div class="validations-list">
+            @for (validation of field().validations; track validation.id) {
+                <div class="validation-row">
+                    <tui-textfield tuiChevron [stringify]="stringifyValidation">
+                        <label tuiLabel>Вид</label>
+                        <input
+                                tuiSelect
+                                [disabled]="isSystemField() || isLockedValidation(validation.id)"
+                                [ngModel]="validation.kind"
+                                (ngModelChange)="updateValidation(validation.id, {
+                                    kind: $event,
+                                    value: undefined,
+                                    serverValidatorId: undefined,
+                                    customRule: undefined,
+                                })"
+                        />
+                        <tui-data-list-wrapper *tuiDropdown [items]="validationKindValues"/>
+                    </tui-textfield>
+
+                    @if (validation.kind === 'min' ||
+                    validation.kind === 'max' ||
+                    validation.kind === 'minLength' ||
+                    validation.kind === 'maxLength') {
+                        <tui-textfield>
+                            <label tuiLabel>Значение</label>
+                            <input
+                                    tuiInputNumber
+                                    [step]="1"
+                                    [ngModel]="validation.value ?? null"
+                                    (ngModelChange)="onValidationNumber(validation.id, $event)"
+                            />
+                        </tui-textfield>
+                    }
+
+                    @if (validation.kind === 'regex') {
+                        <tui-textfield>
+                            <label tuiLabel>Regex</label>
+                            <input
+                                    tuiInput
+                                    [ngModel]="validation.value"
+                                    (ngModelChange)="updateValidation(validation.id, {value: $event})"
+                            />
+                        </tui-textfield>
+                    }
+
+                    @if (validation.kind === 'custom') {
+                        <tui-textfield>
+                            <label tuiLabel>Кастомное правило</label>
+                            <input
+                                    tuiInput
+                                    [ngModel]="validation.customRule"
+                                    (ngModelChange)="updateValidation(validation.id, {customRule: $event})"
+                            />
+                        </tui-textfield>
+                    }
+
+                    @if (validation.kind === 'server') {
+                        <tui-textfield tuiChevron [stringify]="stringifyServerValidator">
+                            <label tuiLabel>Серверный валидатор</label>
+                            <input
+                                    tuiSelect
+                                    [ngModel]="validation.serverValidatorId || null"
+                                    (ngModelChange)="updateValidation(validation.id, {serverValidatorId: $event})"
+                            />
+                            <tui-data-list-wrapper *tuiDropdown [items]="serverValidatorIds()"/>
+                        </tui-textfield>
+                    }
+
+                    <button
+                            appearance="flat-destructive"
+                            iconStart="@tui.trash"
+                            size="s"
+                            tuiIconButton
+                            type="button"
+                            class="validation-row__delete"
+                            [disabled]="isSystemField() || isLockedValidation(validation.id)"
+                            (click)="removeValidation(validation.id)"
+                    >
+                        Удалить
+                    </button>
+                </div>
+            }
+        </div>
+
+        <button
+                appearance="flat"
+                iconStart="@tui.plus"
+                size="m"
+                tuiButton
+                type="button"
+                class="add-field"
+                [disabled]="isSystemField()"
+                (click)="addValidation()"
+        >
+            Валидация
+        </button>
+    </section>
+
+    <footer class="actions actions_split">
+        <button appearance="flat" tuiButton type="button" (click)="goBack()">Назад</button>
+        <div class="actions__right">
+            <button appearance="secondary" tuiButton type="button" (click)="cancel()">Отмена</button>
+            <button appearance="primary" tuiButton type="button" (click)="save()">Сохранить</button>
+        </div>
+    </footer>
+</div>
+
+<ng-template #fieldTypeItem let-type>
+    <span
+            class="field-type-item"
+            [tuiHint]="isObjectTypeDisabled(type) ? objectNestingLimitHint : null"
+    >
+        {{ stringifyType(type) }}
+    </span>
+</ng-template>

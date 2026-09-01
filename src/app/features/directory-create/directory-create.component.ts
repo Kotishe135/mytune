@@ -4,43 +4,32 @@ import {FormsModule} from '@angular/forms';
 import {ActivatedRoute, Router, RouterLink} from '@angular/router';
 import {
   TuiButton,
-  TuiCell,
-  TuiClose,
   TuiIcon,
   TuiInput,
   TuiLabel,
   TuiNotification,
-  TuiPopup,
   TuiTextfield,
   TuiTitle,
 } from '@taiga-ui/core';
-import {
-  TuiBadge,
-  TuiChevron,
-  TuiDataListWrapper,
-  TuiDrawer,
-  TuiInputChip,
-  TuiSelect,
-  TuiSwitch,
-  TuiTextarea,
-} from '@taiga-ui/kit';
+import {TuiChevron, TuiDataListWrapper, TuiSelect, TuiSwitch, TuiTextarea} from '@taiga-ui/kit';
 import {TuiCardLarge, TuiForm} from '@taiga-ui/layout';
 import {
   DIRECTORY_TYPE_OPTIONS,
-  FIELD_TYPE_OPTIONS,
   FILE_DIRECTORY_FORMAT_OPTIONS,
   DirectoryType,
   FieldDefinition,
-  FieldType,
-  FieldValidation,
   FileDirectoryFormat,
-  VALIDATION_KIND_OPTIONS,
-  ValidationKind,
 } from '../../core/models/directory.models';
+import {DirectoryDraftService} from '../../core/services/directory-draft.service';
 import {DirectoryStoreService} from '../../core/services/directory-store.service';
 import {ItemFactoryService} from '../../core/services/item-factory.service';
 import {SchemaBuilderService} from '../../core/services/schema-builder.service';
-import {ValidationCatalogService} from '../../core/services/validation-catalog.service';
+import {
+  cloneField,
+  createEmptyField,
+  fieldTypeLabel,
+  validateField,
+} from '../../core/utils/field-definition.util';
 import {CodeEditorComponent} from '../../shared/code-editor/code-editor.component';
 
 @Component({
@@ -53,21 +42,15 @@ import {CodeEditorComponent} from '../../shared/code-editor/code-editor.componen
     CodeEditorComponent,
     FormsModule,
     RouterLink,
-    TuiBadge,
     TuiButton,
     TuiCardLarge,
-    TuiCell,
     TuiChevron,
-    TuiClose,
     TuiDataListWrapper,
-    TuiDrawer,
     TuiForm,
     TuiIcon,
     TuiInput,
-    TuiInputChip,
     TuiLabel,
     TuiNotification,
-    TuiPopup,
     TuiSelect,
     TuiSwitch,
     TuiTextarea,
@@ -81,47 +64,62 @@ export class DirectoryCreateComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly store = inject(DirectoryStoreService);
+  private readonly draftService = inject(DirectoryDraftService);
   private readonly ids = inject(ItemFactoryService);
   readonly schemaBuilder = inject(SchemaBuilderService);
-  readonly validationCatalog = inject(ValidationCatalogService);
 
-  readonly fieldTypeValues = FIELD_TYPE_OPTIONS.map((o) => o.value);
-  readonly validationKindValues = VALIDATION_KIND_OPTIONS.map((o) => o.value);
   readonly directoryTypeValues = DIRECTORY_TYPE_OPTIONS.map((o) => o.value);
   readonly fileFormatValues = FILE_DIRECTORY_FORMAT_OPTIONS.map((o) => o.value);
 
-  groupId = '';
-  directoryId = '';
-  name = '';
-  description = '';
-  directoryType: DirectoryType = 'list';
-  fileFormat: FileDirectoryFormat = 'json';
-  fileSchemaEnabled = false;
-  fileSchemaText = '';
-
-  readonly isEdit = signal(false);
-  readonly fields = signal<FieldDefinition[]>([]);
   readonly error = signal('');
-  readonly fieldDrawerOpen = signal(false);
-  readonly draft = signal<FieldDefinition | null>(null);
-  readonly draftMode = signal<'add' | 'edit'>('add');
-  readonly draftError = signal('');
-  readonly nestedFieldDrawerOpen = signal(false);
-  readonly nestedDraft = signal<FieldDefinition | null>(null);
-  readonly nestedDraftMode = signal<'add' | 'edit'>('add');
-  readonly nestedDraftError = signal('');
-  readonly nestedEditPath = signal<number[]>([]);
 
-  onFileSchemaChange(value: string): void {
-    this.fileSchemaText = value;
+  get groupId(): string {
+    return this.draftService.draft()?.groupId ?? '';
   }
 
-  readonly directoryIds = computed(() =>
-    this.store
-      .directories()
-      .filter((d) => d.id !== this.directoryId)
-      .map((d) => d.id),
-  );
+  get directoryId(): string {
+    return this.draftService.draft()?.directoryId ?? '';
+  }
+
+  get name(): string {
+    return this.draftService.draft()?.name ?? '';
+  }
+  set name(value: string) {
+    this.draftService.patchDraft({name: value});
+  }
+
+  get description(): string {
+    return this.draftService.draft()?.description ?? '';
+  }
+  set description(value: string) {
+    this.draftService.patchDraft({description: value});
+  }
+
+  get directoryType(): DirectoryType {
+    return this.draftService.draft()?.directoryType ?? 'list';
+  }
+
+  get fileFormat(): FileDirectoryFormat {
+    return this.draftService.draft()?.fileFormat ?? 'json';
+  }
+  set fileFormat(value: FileDirectoryFormat) {
+    this.draftService.patchDraft({fileFormat: value});
+  }
+
+  get fileSchemaEnabled(): boolean {
+    return this.draftService.draft()?.fileSchemaEnabled ?? false;
+  }
+  set fileSchemaEnabled(value: boolean) {
+    this.draftService.patchDraft({fileSchemaEnabled: value});
+  }
+
+  get fileSchemaText(): string {
+    return this.draftService.draft()?.fileSchemaText ?? '';
+  }
+
+  readonly isEdit = computed(() => this.draftService.draft()?.isEdit ?? false);
+
+  readonly fields = computed(() => this.draftService.draft()?.fields ?? []);
 
   readonly pageTitle = computed(() =>
     this.isEdit() ? 'Редактирование справочника' : 'Новый справочник',
@@ -150,431 +148,111 @@ export class DirectoryCreateComponent implements OnInit {
     return idField ? [idField, ...this.userFields()] : this.userFields();
   });
 
-  readonly drawerTitle = computed(() =>
-    this.draftMode() === 'add' ? 'Новое поле' : 'Редактирование поля',
-  );
-  readonly nestedDrawerTitle = computed(() =>
-    this.nestedDraftMode() === 'add'
-      ? 'Новое вложенное поле'
-      : 'Редактирование вложенного поля',
-  );
+  readonly fieldTypeLabel = fieldTypeLabel;
 
   ngOnInit(): void {
     const directoryId = this.route.snapshot.paramMap.get('id') || '';
+    const existingDraft = this.draftService.draft();
+
     if (directoryId) {
+      if (existingDraft?.directoryId === directoryId) {
+        return;
+      }
       const directory = this.store.getDirectory(directoryId);
       if (!directory) {
         void this.router.navigate(['/']);
         return;
       }
-      this.isEdit.set(true);
-      this.directoryId = directory.id;
-      this.groupId = directory.groupId;
-      this.name = directory.name;
-      this.description = directory.description;
-      this.directoryType = directory.type ?? 'list';
-      this.fileFormat = directory.fileFormat ?? 'json';
-      this.fileSchemaEnabled = directory.fileSchemaEnabled ?? false;
-      this.fileSchemaText = directory.fileSchemaText ?? '';
-      this.fields.set(
-        this.directoryType === 'file'
-          ? []
-          : directory.schema.fields
-              .map((field) => this.cloneField(field))
-              .filter((field) =>
-                this.directoryType === 'single' ? !this.isSystemField(field) : true,
-              ),
-      );
+      this.draftService.setDraft({
+        groupId: directory.groupId,
+        directoryId: directory.id,
+        isEdit: true,
+        name: directory.name,
+        description: directory.description,
+        directoryType: directory.type ?? 'list',
+        fileFormat: directory.fileFormat ?? 'json',
+        fileSchemaEnabled: directory.fileSchemaEnabled ?? false,
+        fileSchemaText: directory.fileSchemaText ?? '',
+        fields:
+          directory.type === 'file'
+            ? []
+            : directory.schema.fields
+                .filter((field) =>
+                  directory.type === 'single'
+                    ? !this.schemaBuilder.isSystemIdField(field)
+                    : true,
+                )
+                .map((field) => cloneField(field)),
+      });
       return;
     }
 
-    this.groupId = this.route.snapshot.paramMap.get('groupId') || '';
-    if (!this.store.getGroup(this.groupId)) {
+    const groupId = this.route.snapshot.paramMap.get('groupId') || '';
+    if (existingDraft?.groupId === groupId && !existingDraft.isEdit) {
+      return;
+    }
+    if (!this.store.getGroup(groupId)) {
       void this.router.navigate(['/']);
       return;
     }
-    this.directoryType = 'list';
-    this.fileFormat = 'json';
-    this.fileSchemaEnabled = false;
-    this.fileSchemaText = '';
-    this.fields.set(this.schemaBuilder.ensureIdField([]));
+    this.draftService.setDraft({
+      groupId,
+      directoryId: '',
+      isEdit: false,
+      name: '',
+      description: '',
+      directoryType: 'list',
+      fileFormat: 'json',
+      fileSchemaEnabled: false,
+      fileSchemaText: '',
+      fields: this.schemaBuilder.ensureIdField([]),
+    });
   }
 
   onDirectoryTypeChange(type: DirectoryType): void {
-    this.directoryType = type;
+    const draft = this.draftService.draft();
+    if (!draft) {
+      return;
+    }
+
     if (type === 'file') {
-      this.fields.set([]);
-      this.fileSchemaEnabled = false;
+      this.draftService.patchDraft({
+        directoryType: type,
+        fields: [],
+        fileSchemaEnabled: false,
+      });
       return;
     }
 
-    this.fileSchemaEnabled = false;
-    this.fileSchemaText = '';
+    const fields =
+      type === 'list'
+        ? this.schemaBuilder.ensureIdField(draft.fields)
+        : draft.fields.filter((f) => !this.schemaBuilder.isSystemIdField(f));
 
-    if (type === 'list') {
-      this.fields.set(this.schemaBuilder.ensureIdField(this.fields()));
-      return;
-    }
-    this.fields.set(this.fields().filter((f) => !this.isSystemField(f)));
+    this.draftService.patchDraft({
+      directoryType: type,
+      fields,
+      fileSchemaEnabled: false,
+      fileSchemaText: '',
+    });
+  }
+
+  onFileSchemaChange(value: string): void {
+    this.draftService.patchDraft({fileSchemaText: value});
   }
 
   openAddField(): void {
-    this.draftMode.set('add');
-    this.draftError.set('');
-    this.draft.set({
-      id: this.ids.uuid(),
-      name: '',
-      description: '',
-      type: 'string',
-      isList: false,
-      fields: [],
-      enumValues: [],
-      validations: [],
-    });
-    this.fieldDrawerOpen.set(true);
+    const field = createEmptyField(this.ids.uuid());
+    this.draftService.upsertField(null, field, 'add');
+    void this.router.navigate(this.fieldEditUrl(field.id), {queryParams: {new: '1'}});
   }
 
   openEditField(field: FieldDefinition): void {
-    this.draftMode.set('edit');
-    this.draftError.set('');
-    const cloned = this.cloneField(field);
-    this.draft.set(cloned);
-    this.fieldDrawerOpen.set(true);
-  }
-
-  closeFieldDrawer(): void {
-    this.fieldDrawerOpen.set(false);
-    this.draft.set(null);
-    this.draftError.set('');
-    this.closeNestedFieldDrawer();
-  }
-
-  patchDraft(patch: Partial<FieldDefinition>): void {
-    this.draft.update((current) => {
-      if (!current) {
-        return current;
-      }
-      if (this.isSystemField(current)) {
-        return {...current, description: patch.description ?? current.description};
-      }
-      const next = {...current, ...patch};
-      if (patch.type && !this.schemaBuilder.typeSupportsList(patch.type)) {
-        next.isList = false;
-      }
-      if (patch.type && patch.type !== 'enum') {
-        next.enumValues = [];
-      }
-      if (patch.type && patch.type !== 'reference') {
-        next.referenceDirectoryId = undefined;
-      }
-      if (patch.type && patch.type !== 'object') {
-        next.fields = [];
-      }
-      return next;
-    });
-  }
-
-  setDraftEnumValues(values: string[]): void {
-    this.patchDraft({enumValues: values});
-  }
-
-  addDraftValidation(): void {
-    this.draft.update((current) =>
-      current
-        ? {
-            ...current,
-            validations: [
-              ...current.validations,
-              {id: this.ids.uuid(), kind: 'required'},
-            ],
-          }
-        : current,
-    );
-  }
-
-  updateDraftValidation(
-    validationId: string,
-    patch: Partial<FieldValidation>,
-  ): void {
-    this.draft.update((current) => {
-      if (!current) {
-        return current;
-      }
-      return {
-        ...current,
-        validations: current.validations.map((v) =>
-          v.id === validationId ? {...v, ...patch} : v,
-        ),
-      };
-    });
-  }
-
-  removeDraftValidation(validationId: string): void {
-    const locked = new Set(['val-id-required', 'val-id-unique']);
-    this.draft.update((current) => {
-      if (!current) {
-        return current;
-      }
-      if (this.isSystemField(current) && locked.has(validationId)) {
-        return current;
-      }
-      return {
-        ...current,
-        validations: current.validations.filter((v) => v.id !== validationId),
-      };
-    });
-  }
-
-  onDraftValidationNumber(
-    validationId: string,
-    value: string | number | null,
-  ): void {
-    this.updateDraftValidation(validationId, {
-      value: value === '' || value === null ? undefined : Number(value),
-    });
-  }
-
-  nestedFields(path: number[]): FieldDefinition[] {
-    const objectField = this.objectFieldByPath(path);
-    return objectField?.fields ?? [];
-  }
-
-  nestedPath(path: number[], index: number): number[] {
-    return [...path, index];
-  }
-
-  openAddNestedField(path: number[]): void {
-    const parent = this.objectFieldByPath(path);
-    if (!parent || parent.type !== 'object') {
-      return;
-    }
-    this.nestedDraftMode.set('add');
-    this.nestedDraftError.set('');
-    this.nestedEditPath.set(path);
-    this.nestedDraft.set({
-      id: this.ids.uuid(),
-      name: '',
-      description: '',
-      type: 'string',
-      isList: false,
-      fields: [],
-      enumValues: [],
-      validations: [],
-    });
-    this.nestedFieldDrawerOpen.set(true);
-  }
-
-  openEditNestedField(path: number[]): void {
-    const field = this.fieldByPath(path);
-    if (!field || this.isSystemField(field)) {
-      return;
-    }
-    this.nestedDraftMode.set('edit');
-    this.nestedDraftError.set('');
-    this.nestedEditPath.set(path);
-    this.nestedDraft.set(this.cloneField(field));
-    this.nestedFieldDrawerOpen.set(true);
-  }
-
-  closeNestedFieldDrawer(): void {
-    this.nestedFieldDrawerOpen.set(false);
-    this.nestedDraft.set(null);
-    this.nestedDraftError.set('');
-    this.nestedEditPath.set([]);
-  }
-
-  patchNestedDraft(patch: Partial<FieldDefinition>): void {
-    this.nestedDraft.update((current) => {
-      if (!current) {
-        return current;
-      }
-      const next = {...current, ...patch};
-      if (patch.type && !this.schemaBuilder.typeSupportsList(patch.type)) {
-        next.isList = false;
-      }
-      if (patch.type && patch.type !== 'enum') {
-        next.enumValues = [];
-      }
-      if (patch.type && patch.type !== 'reference') {
-        next.referenceDirectoryId = undefined;
-      }
-      if (patch.type && patch.type !== 'object') {
-        next.fields = [];
-      }
-      return next;
-    });
-  }
-
-  setNestedDraftEnumValues(values: string[]): void {
-    this.patchNestedDraft({enumValues: values});
-  }
-
-  addNestedDraftValidation(): void {
-    this.nestedDraft.update((current) =>
-      current
-        ? {
-            ...current,
-            validations: [
-              ...current.validations,
-              {id: this.ids.uuid(), kind: 'required'},
-            ],
-          }
-        : current,
-    );
-  }
-
-  updateNestedDraftValidation(
-    validationId: string,
-    patch: Partial<FieldValidation>,
-  ): void {
-    this.nestedDraft.update((current) => {
-      if (!current) {
-        return current;
-      }
-      return {
-        ...current,
-        validations: current.validations.map((v) =>
-          v.id === validationId ? {...v, ...patch} : v,
-        ),
-      };
-    });
-  }
-
-  onNestedDraftValidationNumber(
-    validationId: string,
-    value: string | number | null,
-  ): void {
-    this.updateNestedDraftValidation(validationId, {
-      value: value === '' || value === null ? undefined : Number(value),
-    });
-  }
-
-  removeNestedDraftValidation(validationId: string): void {
-    this.nestedDraft.update((current) =>
-      current
-        ? {
-            ...current,
-            validations: current.validations.filter((v) => v.id !== validationId),
-          }
-        : current,
-    );
-  }
-
-  saveNestedDraft(): void {
-    const draft = this.nestedDraft();
-    if (!draft) {
-      return;
-    }
-    this.nestedDraftError.set('');
-    const path = this.nestedEditPath();
-    const siblingNames =
-      this.nestedDraftMode() === 'add'
-        ? this.nestedFields(path).map((f) => f.name.trim())
-        : this.siblingNestedNames(path, draft.id);
-    const message = this.validateField(draft, siblingNames);
-    if (message) {
-      this.nestedDraftError.set(message);
-      return;
-    }
-
-    const normalized: FieldDefinition = {
-      ...draft,
-      name: draft.name.trim(),
-      description: draft.description.trim(),
-      fields: draft.type === 'object' ? draft.fields ?? [] : [],
-      enumValues: draft.enumValues ?? [],
-    };
-    const nestedError = this.validateNestedFields(normalized);
-    if (nestedError) {
-      this.nestedDraftError.set(nestedError);
-      return;
-    }
-
-    this.draft.update((root) => {
-      if (!root) {
-        return root;
-      }
-      const editable = this.cloneField(root);
-      if (this.nestedDraftMode() === 'add') {
-        const target = this.objectFieldByPath(path, editable);
-        if (!target) {
-          return root;
-        }
-        target.fields = [...(target.fields ?? []), normalized];
-      } else {
-        const replaced = this.replaceFieldAtPath(path, normalized, editable);
-        if (!replaced) {
-          return root;
-        }
-      }
-      return editable;
-    });
-
-    this.closeNestedFieldDrawer();
-  }
-
-  removeNestedField(path: number[]): void {
-    if (!path.length) {
-      return;
-    }
-    this.draft.update((root) => {
-      if (!root) {
-        return root;
-      }
-      const editable = this.cloneField(root);
-      const parentPath = path.slice(0, -1);
-      const index = path[path.length - 1];
-      const parent = this.objectFieldByPath(parentPath, editable);
-      if (!parent || !parent.fields) {
-        return root;
-      }
-      parent.fields = parent.fields.filter((_, i) => i !== index);
-      return editable;
-    });
-  }
-
-  saveDraft(): void {
-    const draft = this.draft();
-    if (!draft) {
-      return;
-    }
-
-    this.draftError.set('');
-    const message = this.validateField(draft, this.siblingNames(draft.id));
-    if (message) {
-      this.draftError.set(message);
-      return;
-    }
-
-    const normalized: FieldDefinition = {
-      ...draft,
-      name: draft.name.trim(),
-      description: draft.description.trim(),
-      fields: draft.type === 'object' ? draft.fields ?? [] : [],
-      enumValues: draft.enumValues ?? [],
-    };
-
-    const nestedError = this.validateNestedFields(normalized);
-    if (nestedError) {
-      this.draftError.set(nestedError);
-      return;
-    }
-
-    if (this.draftMode() === 'add') {
-      this.fields.update((list) => [...list, normalized]);
-    } else {
-      this.fields.update((list) =>
-        list.map((f) => (f.id === normalized.id ? normalized : f)),
-      );
-    }
-
-    this.closeFieldDrawer();
+    void this.router.navigate(this.fieldEditUrl(field.id));
   }
 
   removeField(fieldId: string): void {
-    this.fields.update((list) =>
-      list.filter((f) => !(f.id === fieldId && !this.isSystemField(f))),
-    );
+    this.draftService.removeField(fieldId, null);
   }
 
   dropField(event: CdkDragDrop<FieldDefinition[]>): void {
@@ -587,24 +265,9 @@ export class DirectoryCreateComponent implements OnInit {
 
     const idField = reordered.find((field) => this.isSystemField(field));
     const userFields = reordered.filter((field) => !this.isSystemField(field));
-    this.fields.set(idField ? [idField, ...userFields] : userFields);
-  }
-
-  serverValidatorIds(type: FieldType): string[] {
-    return this.validationCatalog.forType(type).map((v) => v.id);
-  }
-
-  stringifyType = (value: FieldType): string =>
-    FIELD_TYPE_OPTIONS.find((o) => o.value === value)?.label || value;
-
-  typeBadge(type: FieldType): string {
-    const label = FIELD_TYPE_OPTIONS.find((o) => o.value === type)?.label ?? type;
-    return label.replace(/\s*\([^)]*\)\s*$/, '').trim() || label;
-  }
-
-  fieldTypeLabel(field: FieldDefinition): string {
-    const type = this.typeBadge(field.type);
-    return field.isList ? `${type} · Список` : type;
+    this.draftService.patchDraft({
+      fields: idField ? [idField, ...userFields] : userFields,
+    });
   }
 
   stringifyDirectoryType = (value: DirectoryType): string =>
@@ -612,15 +275,6 @@ export class DirectoryCreateComponent implements OnInit {
 
   stringifyFileFormat = (value: FileDirectoryFormat): string =>
     FILE_DIRECTORY_FORMAT_OPTIONS.find((o) => o.value === value)?.label || value;
-
-  stringifyValidation = (value: ValidationKind): string =>
-    VALIDATION_KIND_OPTIONS.find((o) => o.value === value)?.label || value;
-
-  stringifyDirectory = (id: string): string =>
-    this.store.getDirectory(id)?.name || id;
-
-  stringifyServerValidator = (id: string): string =>
-    this.validationCatalog.byId(id)?.name || id;
 
   isSystemField(field: Pick<FieldDefinition, 'id'>): boolean {
     return this.schemaBuilder.isSystemIdField(field);
@@ -632,8 +286,12 @@ export class DirectoryCreateComponent implements OnInit {
 
   save(): void {
     this.error.set('');
+    const draft = this.draftService.draft();
+    if (!draft) {
+      return;
+    }
 
-    const name = this.name.trim();
+    const name = draft.name.trim();
     if (!name) {
       this.error.set('Укажите название справочника');
       return;
@@ -643,9 +301,10 @@ export class DirectoryCreateComponent implements OnInit {
     if (this.isSchemaType()) {
       const fields = this.schemaFieldsForType();
       for (const field of fields) {
-        const message = this.validateField(
+        const message = validateField(
           field,
           fields.filter((f) => f.id !== field.id).map((f) => f.name.trim()),
+          this.schemaBuilder,
         );
         if (message) {
           this.error.set(message);
@@ -666,182 +325,60 @@ export class DirectoryCreateComponent implements OnInit {
     } else {
       schema = {
         fields: [],
-        jsonSchema: this.fileSchemaEnabled ? this.fileSchemaText : {},
+        jsonSchema: draft.fileSchemaEnabled ? draft.fileSchemaText : {},
       };
     }
 
-    if (this.isEdit()) {
-      this.store.updateDirectory(this.directoryId, {
+    if (draft.isEdit) {
+      this.store.updateDirectory(draft.directoryId, {
         name,
-        description: this.description.trim(),
-        type: this.directoryType,
-        fileFormat: this.directoryType === 'file' ? this.fileFormat : undefined,
-        fileSchemaEnabled: this.directoryType === 'file' ? this.fileSchemaEnabled : undefined,
-        fileSchemaText: this.directoryType === 'file' ? this.fileSchemaText : undefined,
+        description: draft.description.trim(),
+        type: draft.directoryType,
+        fileFormat: draft.directoryType === 'file' ? draft.fileFormat : undefined,
+        fileSchemaEnabled:
+          draft.directoryType === 'file' ? draft.fileSchemaEnabled : undefined,
+        fileSchemaText:
+          draft.directoryType === 'file' ? draft.fileSchemaText : undefined,
         schema,
       });
-      void this.router.navigate(['/directories', this.directoryId]);
+      this.draftService.clear();
+      void this.router.navigate(['/directories', draft.directoryId]);
       return;
     }
 
     const directory = this.store.createDirectory({
-      groupId: this.groupId,
+      groupId: draft.groupId,
       name,
-      description: this.description.trim(),
-      type: this.directoryType,
-      fileFormat: this.directoryType === 'file' ? this.fileFormat : undefined,
-      fileSchemaEnabled: this.directoryType === 'file' ? this.fileSchemaEnabled : undefined,
-      fileSchemaText: this.directoryType === 'file' ? this.fileSchemaText : undefined,
+      description: draft.description.trim(),
+      type: draft.directoryType,
+      fileFormat: draft.directoryType === 'file' ? draft.fileFormat : undefined,
+      fileSchemaEnabled:
+        draft.directoryType === 'file' ? draft.fileSchemaEnabled : undefined,
+      fileSchemaText:
+        draft.directoryType === 'file' ? draft.fileSchemaText : undefined,
       schema,
     });
 
+    this.draftService.clear();
     void this.router.navigate(['/directories', directory.id]);
   }
 
   private schemaFieldsForType(): FieldDefinition[] {
+    const fields = this.fields();
     if (this.directoryType === 'list') {
-      return this.schemaBuilder.ensureIdField(this.fields());
+      return this.schemaBuilder.ensureIdField(fields);
     }
-    return this.fields().filter((f) => !this.isSystemField(f));
+    return fields.filter((f) => !this.isSystemField(f));
   }
 
-  private siblingNames(fieldId: string): string[] {
-    return this.tileFields()
-      .filter((f) => f.id !== fieldId)
-      .map((f) => f.name.trim());
-  }
-
-  private validateField(
-    field: FieldDefinition,
-    otherNames: string[],
-  ): string | null {
-    const name = field.name.trim();
-    if (!name) {
-      return 'Укажите имя поля';
+  private fieldEditUrl(fieldId: string): string[] {
+    const draft = this.draftService.draft();
+    if (!draft) {
+      return ['/'];
     }
-    if (!this.isSystemField(field) && name === 'id') {
-      return 'Имя «id» зарезервировано системным полем';
+    if (draft.isEdit) {
+      return ['/directories', draft.directoryId, 'edit', 'fields', fieldId];
     }
-    if (otherNames.includes(name)) {
-      return 'Имена полей должны быть уникальны';
-    }
-    if (field.type === 'enum' && !field.enumValues?.length) {
-      return `Поле «${name}»: задайте значения enum`;
-    }
-    if (field.type === 'reference' && !field.referenceDirectoryId) {
-      return `Поле «${name}»: выберите справочник-ссылку`;
-    }
-    for (const v of field.validations) {
-      if (v.kind === 'server' && !v.serverValidatorId) {
-        return `Поле «${name}»: выберите серверный валидатор`;
-      }
-      if (v.kind === 'custom' && !v.customRule?.trim()) {
-        return `Поле «${name}»: опишите кастомное правило`;
-      }
-      if (
-        ['min', 'max', 'minLength', 'maxLength', 'regex'].includes(v.kind) &&
-        (v.value === undefined || v.value === '')
-      ) {
-        return `Поле «${name}»: укажите значение для валидации ${v.kind}`;
-      }
-    }
-    return null;
-  }
-
-  private validateNestedFields(
-    parent: FieldDefinition,
-    path = parent.name.trim(),
-  ): string | null {
-    if (parent.type !== 'object') {
-      return null;
-    }
-    const nested = parent.fields ?? [];
-    const names = new Set<string>();
-    for (const field of nested) {
-      const fieldName = field.name.trim();
-      if (!fieldName) {
-        return `Объект «${path}»: укажите имя каждого вложенного поля`;
-      }
-      if (fieldName === 'id') {
-        return `Объект «${path}»: имя «id» зарезервировано`;
-      }
-      if (names.has(fieldName)) {
-        return `Объект «${path}»: имена вложенных полей должны быть уникальны`;
-      }
-      names.add(fieldName);
-      const message = this.validateField(
-        field,
-        nested
-          .filter((f) => f !== field)
-          .map((f) => f.name.trim()),
-      );
-      if (message) {
-        return `Объект «${path}»: ${message}`;
-      }
-      const childError = this.validateNestedFields(field, `${path}.${fieldName}`);
-      if (childError) {
-        return childError;
-      }
-    }
-    return null;
-  }
-
-  private cloneField(field: FieldDefinition): FieldDefinition {
-    return {
-      ...field,
-      fields: (field.fields ?? []).map((nested) => this.cloneField(nested)),
-      enumValues: [...(field.enumValues || [])],
-      validations: field.validations.map((v) => ({...v})),
-    };
-  }
-
-  private siblingNestedNames(path: number[], fieldId: string): string[] {
-    if (!path.length) {
-      return [];
-    }
-    const parent = this.objectFieldByPath(path.slice(0, -1));
-    return (parent?.fields ?? [])
-      .filter((f) => f.id !== fieldId)
-      .map((f) => f.name.trim());
-  }
-
-  private fieldByPath(path: number[], root = this.draft()): FieldDefinition | null {
-    if (!root) {
-      return null;
-    }
-    if (!path.length) {
-      return root;
-    }
-    let current: FieldDefinition | undefined = root;
-    for (const index of path) {
-      if (!current || current.type !== 'object') {
-        return null;
-      }
-      current = (current.fields ?? [])[index];
-    }
-    return current ?? null;
-  }
-
-  private objectFieldByPath(path: number[], root = this.draft()): FieldDefinition | null {
-    const field = this.fieldByPath(path, root);
-    return field && field.type === 'object' ? field : null;
-  }
-
-  private replaceFieldAtPath(
-    path: number[],
-    field: FieldDefinition,
-    root: FieldDefinition,
-  ): boolean {
-    if (!path.length) {
-      return false;
-    }
-    const parentPath = path.slice(0, -1);
-    const index = path[path.length - 1];
-    const parent = this.objectFieldByPath(parentPath, root);
-    if (!parent || !parent.fields || !parent.fields[index]) {
-      return false;
-    }
-    parent.fields = parent.fields.map((item, i) => (i === index ? field : item));
-    return true;
+    return ['/groups', draft.groupId, 'directories', 'new', 'fields', fieldId];
   }
 }
